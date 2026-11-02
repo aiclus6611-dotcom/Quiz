@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>課堂互動即時答題系統 v1.3｜首頁名稱修正版</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+        body { font-family: "微軟正黑體", "Microsoft JhengHei", sans-serif; background-color: #f8fafc; margin: 0; padding: 0; overflow-x: hidden; color: #1e293b;}
+        
+        /* --- 通用元件 (保留給學員與講師端使用) --- */
+        .btn { padding: 10px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 1rem; margin: 5px; transition: 0.2s; white-space: nowrap; font-weight: bold;}
+        .btn:hover { opacity: 0.9; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1);}
+        .btn:disabled { background: #ccc !important; cursor: not-allowed; transform: none; box-shadow: none; color: #666 !important;}
+        .btn-primary { background: #1976d2; color: white; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-danger { background: #d32f2f; color: white; }
+        .btn-secondary { background: #757575; color: white; }
+        .btn-outline { background: #f8fafc; border: 1px solid #cbd5e1; color: #334155; }
+        .btn-outline:hover { background: #e2e8f0; }
+        
+        input, select, type { padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; box-sizing: border-box; }
+        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+
+        /* === 新版管理後台登入畫面樣式 === */
+        .login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #f8fafc; }
+        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; width: 100%; max-width: 400px; box-sizing: border-box; border-top: 6px solid #0ea5e9; }
+        .login-box h2 { color: #0f172a; margin-bottom: 25px; margin-top: 0; font-size: 1.8rem; }
+        .login-box input[type="password"] { width: 100%; padding: 14px; font-size: 1.1rem; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; box-sizing: border-box; outline: none; transition: 0.3s; text-align: center; letter-spacing: 2px;}
+        .login-box input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
+        .btn-login { background: #0ea5e9; color: white; border: none; cursor: pointer; transition: 0.2s; font-weight: bold; border-radius: 8px;}
+        .btn-login:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* === 新版管理後台專用佈局 === */
+        .admin-container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; box-sizing: border-box; }
+        .admin-header { text-align: center; margin-bottom: 30px; color: #1e293b; font-size: 2.2rem; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 12px; }
+        .admin-create-box { background: white; padding: 25px; border-radius: 12px; display: flex; gap: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); margin-bottom: 30px; align-items: center; flex-wrap: wrap; }
+        .admin-create-box input[type="text"] { flex: 1; padding: 14px 18px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1.1rem; min-width: 250px; outline: none; transition: 0.3s; }
+        .admin-create-box input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
+        .admin-room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding-bottom: 50px; }
+        .room-card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); border-top: 6px solid #0ea5e9; position: relative; transition: transform 0.2s, box-shadow 0.2s; }
+        .room-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.07); }
+        .room-title { font-size: 1.4rem; font-weight: bold; color: #0f172a; margin-bottom: 10px; line-height: 1.3; }
+        .room-date { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; }
+        
+        /* 管理後台專用按鈕 */
+        .btn-block { display: block; width: 100%; margin: 8px 0; padding: 10px; font-size: 1rem; border-radius: 8px; font-weight: bold; text-align: center; box-sizing: border-box; cursor: pointer; border: none; transition: 0.2s; text-decoration: none;}
+        .btn-block:hover { opacity: 0.9; transform: translateY(-1px); }
+        .admin-btn-primary { background: #0ea5e9; color: white; }
+        .admin-btn-warning { background-color: #f59e0b; color: white; }
+        .admin-btn-outline { background: white; border: 1px solid #d1d5db; color: #374151; }
+        .admin-btn-outline-blue { background: white; border: 1px solid #bae6fd; color: #0284c7; }
+        .admin-btn-outline-green { background: white; border: 1px solid #a7f3d0; color: #059669; }
+        .admin-btn-danger { background: #dc2626; color: white; }
+
+/* --- 新課堂答題系統：只增加專案內部樣式，原登入與管理卡片 CSS 不變 --- */
+[v-cloak]{display:none!important}
+.app-shell{max-width:1340px;margin:auto;padding:20px 18px 70px}
+.topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:20px}
+.topbar h1{font-size:1.55rem;margin:0;color:#0f172a}
+.pill{display:inline-block;background:#e0f2fe;border:1px solid #bae6fd;color:#0369a1;padding:5px 12px;border-radius:999px;font-weight:700;font-size:.86rem}
+.pill.green{background:#dcfce7;border-color:#86efac;color:#166534}
+.pill.amber{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.toolbar .btn{margin:1px}
+.cols{display:grid;grid-template-columns:minmax(260px,350px) minmax(0,1fr);gap:20px;align-items:start}
+.panel{background:white;padding:22px;border-radius:14px;box-shadow:0 3px 14px #0f172a0b}
+.panel h2,.panel h3{margin:0 0 14px;color:#0f172a}
+.hline{height:1px;background:#e2e8f0;margin:18px 0}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:13px}
+.field label{font-size:.94rem;font-weight:700;color:#334155}
+.field input,.field select,.field textarea{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;font:inherit;background:white;box-sizing:border-box}
+.field textarea{resize:vertical;min-height:68px}
+.flexline{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.flexline>*{min-width:0}
+.itemline{border:1px solid #e2e8f0;border-radius:10px;padding:11px;margin:7px 0;background:white}
+.itemline.active{border-color:#0ea5e9;background:#f0f9ff}
+.itemline.muted{opacity:.55}
+.itemline-title{font-weight:bold;overflow-wrap:anywhere;margin:0 0 7px}
+.small{font-size:.86rem;color:#64748b}
+.note{background:#f1f5f9;border-radius:10px;padding:12px;font-size:.9rem;line-height:1.65;color:#475569}
+.empty{padding:32px 14px;border:2px dashed #cbd5e1;border-radius:12px;text-align:center;color:#64748b}
+.alert{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;padding:12px 14px;border-radius:10px;line-height:1.55}
+.statusbox{background:#f0f9ff;border:1px solid #bae6fd;padding:13px;border-radius:10px}
+.rounded-action{border-radius:8px;padding:10px 14px;border:1px solid #cbd5e1;background:white;cursor:pointer;font-weight:700;color:#334155}
+.rounded-action:disabled{opacity:.5;cursor:not-allowed}
+.rounded-action.primary{background:#0284c7;color:white;border-color:#0284c7}
+.rounded-action.green{background:#16a34a;color:white;border-color:#16a34a}
+.rounded-action.orange{background:#f59e0b;color:white;border-color:#f59e0b}
+.rounded-action.danger{background:#dc2626;color:white;border-color:#dc2626}
+.quiz-screen{background:white;border-radius:16px;padding:22px;box-shadow:0 5px 25px #0f172a14}
+.quiz-screen h2{font-size:clamp(1.3rem,3vw,2.2rem);line-height:1.4;text-align:center;color:#0f172a;margin:12px 0 23px;overflow-wrap:anywhere;white-space:pre-wrap}
+.options-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.quiz-option{position:relative;min-width:0;min-height:130px;border:0;border-radius:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;color:white;text-align:center;padding:12px;box-sizing:border-box;overflow-wrap:anywhere;word-break:break-word;font-weight:800;font-size:clamp(1rem,2.1vw,1.6rem);line-height:1.45}
+.quiz-option .letter{font-size:1.2em;font-weight:900}
+.quiz-option .opt-text{font-size:.88em}
+.quiz-option .vote-stat{font-size:.7em;background:#0003;padding:3px 9px;border-radius:999px}
+.quiz-option .correct-icon{position:absolute;right:9px;top:5px;font-size:1.4rem}
+.quiz-option.clickable{cursor:pointer;touch-action:manipulation;transition:transform .08s;user-select:none}
+.quiz-option.clickable:active{transform:scale(.975)}
+.quiz-option.chosen{outline:4px solid #111827;outline-offset:2px;box-shadow:0 0 0 8px #ffffff}
+.quiz-option.locked{cursor:default}
+.quiz-option:disabled{opacity:.78;cursor:not-allowed}
+.quiz-option:focus-visible{outline:4px solid #111827;outline-offset:2px}
+.results-panel{background:#ecfdf5;border:1px solid #86efac;padding:17px;border-radius:12px;margin-top:17px;color:#14532d;line-height:1.6}
+.results-panel h3{margin:0 0 5px;color:#166534}
+.timer{font-size:1.25rem;font-weight:900;color:#c2410c}
+.timer.expired{color:#b91c1c}
+.projection-layout{display:grid;grid-template-columns:minmax(150px,var(--qr-width,25%)) minmax(0,1fr);gap:12px;align-items:stretch}
+.qr-side{background:white;padding:14px;border-radius:16px;box-shadow:0 5px 25px #0f172a14;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.qr-side .qr-render{max-width:100%;width:100%;display:flex;justify-content:center}
+.qr-render canvas,.qr-render img{max-width:100%;height:auto!important}
+.proj-fullscreen{background:#f8fafc;min-height:100vh;padding:22px;box-sizing:border-box}
+.proj-fullscreen .quiz-option{min-height:clamp(125px,22vh,250px);font-size:clamp(1.2rem,2.6vw,2.5rem)}
+.proj-fullscreen .quiz-screen{height:auto;min-height:60vh}
+.projection-layout.noqr{grid-template-columns:minmax(0,1fr)}
+.student-page{max-width:650px;margin:auto;padding:15px 12px 50px}
+.student-card{border-radius:16px;background:white;padding:18px;box-shadow:0 4px 18px #0f172a12;margin:12px 0}
+.student-page .quiz-option{min-height:clamp(108px,24vh,180px);font-size:clamp(1rem,4.3vw,1.45rem);padding:9px}
+.student-page .options-grid{gap:9px}
+.student-page .quiz-screen{padding:15px}
+.student-page .quiz-screen h2{font-size:clamp(1.25rem,5vw,1.9rem)}
+.student-page .quiz-option .opt-text{font-size:.80em}
+.join-box{max-width:390px;margin:9vh auto 0;padding:28px;background:white;border-radius:16px;box-shadow:0 5px 22px #0f172a15;text-align:center}
+.join-box input{width:100%;margin:12px 0 16px;padding:14px;box-sizing:border-box;border-radius:8px;border:1px solid #cbd5e1;font-size:1.1rem}
+.leaderboard{width:100%;border-collapse:collapse;margin-top:10px}
+.leaderboard th,.leaderboard td{padding:9px;border-bottom:1px solid #e2e8f0;text-align:left}
+.leaderboard th{background:#f8fafc;color:#475569;font-size:.87rem}
+.modal-scrim{position:fixed;inset:0;background:#0f172acc;z-index:600;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
+.modal-panel{width:min(700px,100%);max-height:94dvh;overflow:auto;background:white;border-radius:16px;padding:23px;box-sizing:border-box}
+.modal-panel h2{margin-top:0}
+.option-editor-row{display:grid;grid-template-columns:35px minmax(0,1fr) 85px;align-items:center;gap:7px;margin:10px 0}
+.option-editor-row input[type=text]{width:100%;min-width:0}
+.option-editor-row .letter-tag{border-radius:8px;padding:9px;color:white;text-align:center;font-weight:900}
+.toast-new{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0f172a;color:white;border-radius:20px;max-width:90vw;padding:12px 19px;z-index:990;text-align:center;box-shadow:0 4px 17px #0003}
+@media(max-width:850px){.cols{grid-template-columns:minmax(0,1fr)}.app-shell{padding:13px 11px 60px}.projection-layout{grid-template-columns:minmax(0,1fr)}.qr-side{max-width:100%}.proj-fullscreen{padding:10px}.proj-fullscreen .quiz-option{min-height:130px}.admin-container{padding:25px 15px}}
+@media(max-width:380px){.student-page .quiz-option{min-height:102px;padding:5px}.student-page .quiz-option .opt-text{font-size:.75em}.options-grid{gap:7px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* v1.2｜即時測驗三鍵流程、0→目標人數、排行榜名次移動；回看完全靜態 */
+.teacher-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:14px}
+.live-step{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:76px;font-size:1.08rem;white-space:normal;line-height:1.3;text-align:center}
+.live-step .step-hint{font-size:.73rem;font-weight:500;line-height:1.25;opacity:.95}
+.rank-section{margin-top:15px;padding:16px;border:1px solid #bae6fd;border-radius:13px;background:#f8fafc}
+.rank-section h3{margin:0 0 12px}
+.rank-rows{display:flex;flex-direction:column;gap:6px;position:relative}
+.rank-row{display:flex;gap:9px;align-items:center;border-radius:9px;min-height:38px;padding:6px 12px;background:white;border:1px solid #e2e8f0;box-sizing:border-box}
+.rank-pos{min-width:34px;color:#0284c7;font-size:1.2rem;font-variant-numeric:tabular-nums}
+.rank-name{font-weight:700;flex:1;min-width:0;overflow-wrap:anywhere}
+.rank-accuracy{font-weight:700;color:#475569;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:.9rem}
+.rank-delta{font-size:.8rem;font-weight:800;white-space:nowrap}
+.rank-delta.up{color:#15803d}.rank-delta.down{color:#b45309}
+.rank-row.rank-up{border-color:#86efac;background:#f0fdf4;animation:rank-flash 1.6s ease-out}
+.rank-row.rank-down{border-color:#fed7aa;background:#fffbeb}
+.rank-move-move{transition:transform 1.15s cubic-bezier(.2,.8,.2,1)}
+.rank-move-enter-active{transition:opacity .8s ease,transform .8s ease}
+.rank-move-enter-from{opacity:0;transform:translateY(18px)}
+.rank-move-leave-active{position:absolute;transition:opacity .25s ease}
+.rank-move-leave-to{opacity:0}
+@keyframes rank-flash{0%,35%{box-shadow:0 0 0 3px #22c55e77}100%{box-shadow:0 0 0 0 transparent}}
+.reveal-score{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:center;gap:8px;text-align:center;margin-top:14px;padding:12px;border:1px solid #86efac;background:#fff;border-radius:12px;font-size:1.25rem;font-weight:900;color:#166534}
+.reveal-score strong{font-size:clamp(2rem,5vw,3.7rem);font-variant-numeric:tabular-nums;color:#15803d;line-height:1}
+.reveal-score .small{font-size:.88rem;font-weight:600}
+.projection-rank-rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:7px}
+.projection-rank-rows .rank-row{min-height:46px}
+.review-nav{align-items:center;gap:13px;margin-bottom:15px}
+.review-nav select{width:70px;padding:8px;border-radius:7px}
+@media(max-width:570px){.teacher-steps{grid-template-columns:1fr}.live-step{min-height:55px}.rank-row{padding:6px 7px;gap:5px}.rank-accuracy{font-size:.76rem}}
+@media(prefers-reduced-motion:reduce){.rank-row,.rank-move-move,.rank-move-enter-active{transition:none!important;animation:none!important}}
+
+</style>
+</head>
+<body>
+<div id="app" v-cloak>
+        <div v-if="currentView === 'login'" class="login-container">
+            <div class="login-box">
+                <h2>🔒 後台管理登入</h2>
+                <input type="password" v-model="loginPassword" placeholder="請輸入管理密碼..." @keydown.enter="login">
+                <button class="btn-login" style="width: 100%; padding: 14px; font-size: 1.1rem;" @click="login">登入</button>
+            </div>
+        </div>
+
+        <div v-else-if="currentView === 'lobby'" class="admin-container">
+            <div class="admin-header">
+                <span style="font-size: 2.8rem; color:#0ea5e9;">📊</span> 課堂互動即時答題系統
+            </div>
+
+            <div class="admin-create-box">
+                <input type="text" v-model="newPollName" placeholder="輸入新課程專案名稱..." @keydown.enter="createPoll">
+                <button class="btn-login" @click="createPoll" style="font-size: 1.1rem; padding: 14px 28px; background: #10b981;">＋ 建立新課程</button>
+            </div>
+
+            <div style="margin-bottom: 20px; text-align:right;">
+                <button class="btn btn-outline" @click="toggleArchives" type="button">{{ showArchives ? '收起已刪專案' : '↶ 還原已刪專案' }}</button>
+            </div>
+            <div v-if="showArchives" class="card" style="margin-bottom:24px;">
+                <h3 style="margin-top:0;">已刪除課程專案（可復原）</h3>
+                <div v-if="archiveList.length === 0" style="color:#64748b;">目前沒有已封存的課程專案。</div>
+                <div v-for="entry in archiveList" :key="entry.archiveId" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 0; border-bottom:1px solid #e2e8f0;">
+                    <span>{{ entry.name }} <small style="color:#64748b;">({{ new Date(entry.deletedAt).toLocaleString() }})</small></span>
+                    <button class="btn btn-outline" @click="restoreDeletedPoll(entry.archiveId)">↶ 還原課程與成績</button>
+                </div>
+            </div>
+            <div class="admin-room-grid">
+                <div v-for="poll in pollsList" :key="poll.id" class="room-card">
+                    <div class="room-title">{{ poll.name }}</div>
+                    <div class="room-date">建立於: {{ new Date(poll.createdAt).toLocaleString() }}</div>
+                    <div class="room-actions">
+                        <a :href="getLink(poll.id, 'teacher')" target="_blank" class="btn-block admin-btn-primary">👨‍🏫 開啟講師控制台</a>
+                        <button class="btn-block admin-btn-warning" @click="copyLink(poll.id, 'student')">🔗 複製學員連結</button>
+                        
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-block admin-btn-outline-blue" @click="openRename(poll)" style="margin: 0;">✏️ 重新命名</button>
+                            <button class="btn-block admin-btn-outline-green" @click="duplicatePoll(poll)" style="margin: 0;">📄 複製課程</button>
+                        </div>
+
+                        <button class="btn-block admin-btn-danger" @click="deletePoll(poll.id)" style="margin-top: 8px;">🗑️ 刪除課程</button>
+                    </div>
+                </div>
+                
+                <div v-if="!isLoading && pollsList.length === 0" style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 50px; background: white; border-radius: 12px; border: 2px dashed #e2e8f0;">
+                    目前尚無任何課程專案，請於上方輸入名稱建立。
+                </div>
+            </div>
+        </div>
+
+        
+        
+        <div v-else-if="currentView === 'teacher'" class="app-shell">
+          <div class="topbar">
+            <div><h1>👨‍🏫 {{ projectMeta.name || '課程專案' }}</h1><span class="small">題組編輯・課堂控制台</span></div>
+            <div class="toolbar"><button class="rounded-action" @click="goLobby">← 專案首頁</button><button class="rounded-action" @click="copyLink(projectId,'student')">🔗 學員連結</button><button class="rounded-action" @click="copyLink(projectId,'display')">📺 複製投影連結</button><button class="rounded-action primary" @click="openDisplay">📺 開啟投影</button></div>
+          </div>
+          <div v-if="errorMessage" class="alert" style="margin-bottom:12px">⚠ {{ errorMessage }}</div>
+          <div class="cols">
+            <section class="panel">
+              <h2>📚 題組管理</h2>
+              <div class="field"><label>新增題組名稱</label><input v-model.trim="newSetName" placeholder="例如：課前測驗" @keydown.enter="createSet"></div>
+              <button class="rounded-action primary" @click="createSet">＋ 建立題組</button>
+              <div class="hline"></div>
+              <div v-if="activeSets.length===0" class="empty">尚未建立題組，請從上方新增。</div>
+              <div v-for="s in activeSets" :key="s.id" class="itemline" :class="{active:selectedSetId===s.id}">
+                <div class="itemline-title" @click="selectedSetId=s.id" style="cursor:pointer">📖 {{ s.name }}</div>
+                <div class="small">{{ questionCount(s.id) }} 題</div>
+                <div class="flexline" style="margin-top:8px">
+                  <button class="rounded-action" @click="selectedSetId=s.id">選擇</button><button class="rounded-action" @click="renameSet(s)">更名</button><button class="rounded-action" @click="cloneSet(s)">複製</button><button class="rounded-action danger" @click="archiveSet(s)">封存</button>
+                </div>
+              </div>
+              <details style="margin-top:12px" v-if="archivedSets.length"><summary>↶ 已封存題組（{{archivedSets.length}}）</summary><div v-for="s in archivedSets" :key="s.id" class="itemline">{{s.name}} <button class="rounded-action" @click="restoreSet(s)">還原</button></div></details>
+              <div class="hline"></div>
+              <h3>📱 加入課堂</h3>
+              <div class="qr-render" ref="teacherQr"></div><p class="small" style="overflow-wrap:anywhere">{{getLink(projectId,'student')}}</p>
+              <div class="note">QR Code 自動對應此專案固定學員連結。建議使用 HTTPS 網址部署。若 QR 程式庫未載入，仍可複製連結加入。</div>
+            </section>
+            <div style="min-width:0;display:flex;flex-direction:column;gap:18px">
+              <section class="panel">
+                <div class="topbar" style="margin-bottom:10px"><h2 style="margin:0">✏️ {{ selectedSet ? selectedSet.name : '請先選擇題組' }}</h2><button class="rounded-action primary" :disabled="!selectedSet" @click="openNewQuestion">＋ 新增題目</button></div>
+                <template v-if="selectedSet">
+                  <div class="flexline" style="margin:10px 0 14px"><label>作答方式　<select v-model="setAnswerMode" @change="saveAnswerMode" style="max-width:230px"><option value="quick">單選點擊即送出</option><option value="confirm">選好後按確認送出</option></select></label></div>
+                  <div v-if="selectedQuestions.length===0" class="empty">這個題組還沒有題目。</div>
+                  <div v-for="(q,i) in selectedQuestions" :key="q.id" class="itemline">
+                    <div class="itemline-title">第 {{i+1}} 題　{{q.text}}</div><div class="small">{{typeLabel(q.type)}}・{{q.duration?`${q.duration} 秒`:'不限時間'}}・{{q.type==='poll'?'無標準答案':'答案：'+q.correct.join('、')}}</div>
+                    <div class="flexline" style="margin-top:8px"><button class="rounded-action" @click="editQuestion(q)">編輯</button><button class="rounded-action" :disabled="i===0" @click="moveQuestion(q,-1)">↑</button><button class="rounded-action" :disabled="i===selectedQuestions.length-1" @click="moveQuestion(q,1)">↓</button><button class="rounded-action" @click="cloneQuestion(q)">複製</button><button class="rounded-action danger" @click="archiveQuestion(q)">封存</button></div>
+                  </div>
+                  <details v-if="archivedQuestions.length" style="margin-top:12px"><summary>↶ 已封存題目（{{archivedQuestions.length}}）</summary><div v-for="q in archivedQuestions" :key="q.id" class="itemline"><span>{{q.text}}</span> <button class="rounded-action" @click="restoreQuestion(q)">還原</button></div></details>
+                </template>
+              </section>
+              <section class="panel">
+                <h2>🎤 即時測驗｜講師三步驟</h2>
+                <div v-if="activeSessionId" class="statusbox">
+                  <div><b>目前場次：</b>{{ session.setName || '載入中' }}　<span class="pill" :class="{green:phase==='revealed',amber:phase==='closed'}">{{phaseLabel}}</span></div>
+                  <div class="small">場次 {{activeSessionId.slice(-8)}}・加入 {{memberCount}} 人・本題已答 {{currentAnswerCount}} 人</div>
+                  <div v-if="currentQuestion" class="small">第 {{session.state.questionIndex+1}} / {{session.order.length}} 題：{{currentQuestion.text}}</div>
+                </div>
+                <div v-else class="note">選擇一個題組後，按下「開始」即可直接開放第一題。</div>
+                <div class="teacher-steps" v-if="!reviewMode">
+                  <button class="rounded-action green live-step" @click="startSession" :disabled="!selectedQuestions.length||working">▶ ① 開始<span class="step-hint">{{activeSessionId?'重新開新場次':'直接開放第一題'}}</span></button>
+                  <button class="rounded-action primary live-step" @click="publishResult" :disabled="!canPublish||working">🏁 ② 看結果<span class="step-hint">立即公布正解＋票數＋排名動畫</span></button>
+                  <button class="rounded-action orange live-step" @click="nextQuestion" :disabled="!canNext||working">➡ ③ 下一題<span class="step-hint">直接開放下一題，不需再按開始</span></button>
+                </div>
+                <p class="small" v-if="!reviewMode">「看結果」會立即停止本題收答並公布正解；答對人數從 0 遞增，最新名次同步動畫變動。倒數到 0 只停止收答，不會自動公布或切題。</p>
+                <div class="hline"></div>
+                <div class="flexline">
+                  <button class="rounded-action" @click="openCurrentReview" :disabled="!activeSessionId||historyLoading">📚 逐題回看全部結果</button>
+                  <button class="rounded-action" @click="loadHistory" :disabled="historyLoading">🗃️ 選擇歷史場次</button>
+                  <button class="rounded-action" @click="exportSession" :disabled="!activeSessionId">💾 匯出場次</button>
+                  <button v-if="activeSessionId&&!session.state.finishedAt&&isLastQuestion&&phase==='revealed'" class="rounded-action" @click="finishSession">完成本場並回看</button>
+                </div>
+                <div v-if="historySessions.length" class="field" style="margin-top:12px"><label>歷史場次（回顧不影響目前課程）</label>
+                  <div v-for="h in historySessions" :key="h.id" class="itemline flexline" style="justify-content:space-between">
+                    <div><b>{{h.setName}}</b><div class="small">{{new Date(h.createdAt).toLocaleString()}}・{{h.published}} / {{h.count}} 題已公布</div></div>
+                    <button class="rounded-action" @click="openHistory(h.id)">回看</button>
+                  </div>
+                </div>
+              </section>
+              <section class="panel" v-if="activeSessionId&&!reviewMode">
+                <h2>📊 當前題目</h2>
+                <div v-if="currentQuestion" class="quiz-screen">
+                  <div class="flexline" style="justify-content:space-between"><span class="pill">{{phaseLabel}}</span><span v-if="phase==='asking'" class="timer" :class="{expired:remainingSec===0}">{{currentQuestion.duration?remainingSec+' 秒':'不限時'}}</span></div>
+                  <h2>{{currentQuestion.text}}</h2>
+                  <div class="options-grid"><div v-for="(o,i) in currentQuestion.options" :key="i" class="quiz-option" :style="{background:colors[i]}"><span class="correct-icon" v-if="phase==='revealed'&&currentQuestion.correct.includes(letters[i])">✓ 正解</span><span class="letter">{{letters[i]}}</span><span class="opt-text">{{o}}</span><span v-if="phase==='revealed'&&currentResult" class="vote-stat">{{resultCount(i)}} 票｜{{resultPercent(i)}}%</span></div></div>
+                  <div v-if="phase==='revealed'" class="results-panel">
+                    <h3>✅ {{currentQuestion.type==='poll'?'本題為意見投票':'正確答案：'+currentQuestion.correct.join('、')}}</h3>
+                    <div>{{currentQuestion.explanation || '解說時間由講師自由決定，點「下一題」才開始新題。'}}</div>
+                    <div class="reveal-score" v-if="currentQuestion.type!=='poll'">🎯 答對 <strong>{{displayedCorrectCount}}</strong> 人 <span class="small">／ 共 {{currentResult?.total||0}} 人作答</span></div>
+                    <div class="small" v-else>本題 {{currentResult?.total||0}} 人作答</div>
+                  </div>
+                </div>
+                <div v-else class="empty">尚未開始上課</div>
+                <div v-if="phase==='revealed'&&currentResult" class="rank-section">
+                  <h3>🏆 全班最新答題正確率排名 <span class="small">（每公布一題更新）</span></h3>
+                  <transition-group name="rank-move" tag="div" class="rank-rows">
+                    <div v-for="r in displayRankingRows" :key="r.id" class="rank-row" :class="{'rank-up':revealAnimating&&movement(r.id)>0,'rank-down':revealAnimating&&movement(r.id)<0}">
+                      <b class="rank-pos">{{r.rank}}.</b><span class="rank-name">{{r.nickname}}</span>
+                      <span v-if="revealAnimating&&rankAnimationPhase==='after'&&movement(r.id)>0" class="rank-delta up">▲ {{movement(r.id)}} 名</span>
+                      <span v-else-if="revealAnimating&&rankAnimationPhase==='after'&&movement(r.id)<0" class="rank-delta down">▼ {{Math.abs(movement(r.id))}} 名</span>
+                      <span class="rank-accuracy">{{r.correct}} / {{r.graded||gradedQuestionCount}} 題・{{r.accuracy}}%</span>
+                    </div>
+                  </transition-group>
+                  <div v-if="!displayRankingRows.length" class="small">尚無學員成績</div>
+                </div>
+              </section>
+              <section class="panel" v-if="reviewMode">
+                <div class="topbar"><div><h2 style="margin:0">📚 逐題回看｜無動畫</h2><div class="small">只顯示已保存的題目及答題結果，不會改變正式上課的狀態。</div></div><button class="rounded-action" @click="closeReview">返回即時控制</button></div>
+                <div class="flexline review-nav">
+                  <button class="rounded-action" @click="reviewMove(-1)" :disabled="reviewIndex<=0">← 上一題</button>
+                  <label>第 <select :value="reviewIndex" @change="reviewJump($event.target.value)"><option v-for="(qid,i) in reviewData.order||[]" :value="i" :key="qid">{{i+1}}</option></select> / {{reviewCount}} 題</label>
+                  <button class="rounded-action primary" @click="reviewMove(1)" :disabled="reviewIndex>=reviewCount-1">下一題 →</button>
+                  <button class="rounded-action" @click="openHistoryDisplay">📺 投影回顧畫面</button>
+                </div>
+                <div class="quiz-screen" v-if="reviewQuestion">
+                  <h2>{{reviewQuestion.text}}</h2>
+                  <div class="options-grid">
+                    <div v-for="(o,i) in reviewQuestion.options" :key="i" class="quiz-option" :style="{background:colors[i]}">
+                      <span v-if="reviewQuestion.correct.includes(letters[i])&&reviewResult" class="correct-icon">✓ 正解</span>
+                      <span class="letter">{{letters[i]}}</span><span class="opt-text">{{o}}</span>
+                      <span v-if="reviewResult" class="vote-stat">{{reviewVoteCount(i)}} 票（{{reviewVotePercent(i)}}%）</span>
+                    </div>
+                  </div>
+                  <div v-if="reviewResult" class="results-panel"><h3>{{reviewQuestion.type==='poll'?'意見投票結果':'✅ 正確答案：'+reviewQuestion.correct.join('、')}}</h3>
+                    <div>{{reviewQuestion.explanation||'講師可自行補充解說。'}}</div>
+                    <div>本題已答 {{reviewResult.total||0}} 人<span v-if="reviewQuestion.type!=='poll'">｜答對 {{reviewResult.correctCount||0}} 人</span></div>
+                  </div>
+                  <div v-else class="note" style="margin-top:14px">本題尚未公布，回看不會自行補算或暴露正確答案。</div>
+                </div>
+                <div v-if="reviewResult&&reviewRanking.length" class="rank-section"><h3>🏆 截至本題公布時的累積排名</h3>
+                  <div v-for="r in reviewRanking" :key="r.id" class="rank-row"><b class="rank-pos">{{r.rank}}.</b><span class="rank-name">{{r.nickname}}</span><span class="rank-accuracy">{{r.correct}} / {{r.graded||0}} 題・{{r.accuracy}}%</span></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        
+        <div v-else-if="currentView==='display'" class="proj-fullscreen">
+          <div class="topbar" style="margin-bottom:14px"><div><h1>📺 {{projectMeta.name || '課堂互動答題'}}</h1><span class="small">{{session.setName || '等待課程開始'}}　｜　已加入 {{memberCount}} 人</span></div><div class="toolbar"><label class="small" v-if="qrVisible" style="display:flex;align-items:center;gap:5px">QR 寬度 <input type="range" min="15" max="42" step="1" v-model.number="qrWidthPercent" style="width:90px"> {{qrWidthPercent}}%</label><button class="rounded-action" @click="qrVisible=!qrVisible">{{qrVisible?'收合':'展開'}} QR Code</button><button class="rounded-action" @click="toggleFullscreen">⛶ 全螢幕</button><span class="pill" :class="{green:phase==='revealed',amber:phase==='closed'}">{{phaseLabel}}</span></div></div>
+          <div v-if="fixedSessionId" class="flexline review-nav" style="justify-content:center;margin-bottom:10px">
+            <button class="rounded-action" @click="reviewDisplayMove(-1)" :disabled="historyIndex<=0">← 上一題</button>
+            <strong>📚 逐題回顧（無動畫）第 {{historyIndex+1}} / {{session.order.length}} 題</strong>
+            <button class="rounded-action primary" @click="reviewDisplayMove(1)" :disabled="historyIndex>=session.order.length-1">下一題 →</button>
+          </div>
+          <div class="projection-layout" :class="{noqr:!qrVisible}" :style="{'--qr-width':qrWidthPercent+'%'}">
+            <aside class="qr-side" v-if="qrVisible"><h3 style="margin:3px 0">📱 掃碼加入課程</h3><div class="qr-render" ref="displayQr"></div><div class="small">請輸入暱稱開始參與答題</div><div class="small" style="overflow-wrap:anywhere">{{getLink(projectId,'student')}}</div></aside>
+            <div class="quiz-screen">
+              <div v-if="!currentQuestion" class="empty">⏳ 等待講師選擇題組並開始上課</div>
+              <template v-else><div class="flexline" style="justify-content:space-between"><b>第 {{fixedSessionId?historyIndex+1:session.state.questionIndex+1}} / {{session.order.length}} 題</b><b v-if="phase==='asking'" class="timer" :class="{expired:remainingSec===0}">{{currentQuestion.duration?remainingSec+' 秒':'不限時間'}}</b></div><h2>{{currentQuestion.text}}</h2>
+                <div class="options-grid"><div v-for="(o,i) in currentQuestion.options" :key="i" class="quiz-option" :style="{background:colors[i]}"><span v-if="phase==='revealed'&&currentQuestion.correct.includes(letters[i])" class="correct-icon">✓ 正解</span><span class="letter">{{letters[i]}}</span><span class="opt-text">{{o}}</span><span v-if="phase==='revealed'&&currentResult" class="vote-stat">{{resultCount(i)}} 票（{{resultPercent(i)}}%）</span></div></div>
+                <div class="flexline" style="justify-content:center;margin-top:14px"><span class="pill">{{phase==='revealed'?'本題結果':phaseLabel}}</span><span class="pill" v-if="phase!=='revealed'">本題已答 {{currentAnswerCount}} 人</span></div>
+                <div class="results-panel" v-if="phase==='revealed'"><h3>✅ {{currentQuestion.type==='poll'?'意見調查結果':'正確答案：'+currentQuestion.correct.join('、')}}</h3><div>{{currentQuestion.explanation||'等待講師解說與切換下一題。'}}</div><div class="reveal-score" v-if="currentQuestion.type!=='poll'">🎯 答對 <strong>{{displayedCorrectCount}}</strong> 人<span class="small">　／共 {{currentResult?.total||0}} 人作答</span></div><div class="small" v-else>{{currentResult?.total||0}} 人作答</div></div>
+              </template>
+            </div>
+          </div>
+          <div v-if="phase==='revealed'&&displayRankingRows.length" class="panel" style="margin-top:14px">
+            <h3>🏆 {{fixedSessionId?'截至本題的累積排名（無動畫）':'最新正確率排名'}}</h3>
+            <transition-group name="rank-move" tag="div" class="rank-rows projection-rank-rows">
+              <div v-for="r in displayRankingRows.slice(0,10)" :key="r.id" class="rank-row" :class="{'rank-up':revealAnimating&&movement(r.id)>0,'rank-down':revealAnimating&&movement(r.id)<0}">
+                <b class="rank-pos">{{r.rank}}.</b><span class="rank-name">{{r.nickname}}</span>
+                <span v-if="revealAnimating&&rankAnimationPhase==='after'&&movement(r.id)>0" class="rank-delta up">▲ {{movement(r.id)}}</span>
+                <span v-else-if="revealAnimating&&rankAnimationPhase==='after'&&movement(r.id)<0" class="rank-delta down">▼ {{Math.abs(movement(r.id))}}</span>
+                <span class="rank-accuracy">{{r.correct}} / {{r.graded||gradedQuestionCount}} 題・{{r.accuracy}}%</span>
+              </div>
+            </transition-group>
+            <p class="small" v-if="displayRankingRows.length>10">投影顯示前 10 名；講師控制台可查看全班完整排名。</p>
+          </div>
+        </div>
+
+        
+        <div v-else-if="currentView==='student'" class="student-page">
+          <div class="topbar"><div><h1>📱 {{projectMeta.name || '課堂互動答題'}}</h1><div class="small">{{studentNickname ? '👤 '+studentNickname : '加入課堂'}}</div></div><span class="pill">{{phaseLabel}}</span></div>
+          <div class="alert" v-if="errorMessage">{{errorMessage}}</div>
+          <div v-if="!studentNickname" class="join-box"><h2>👋 歡迎加入課堂</h2><p class="small">請先輸入暱稱，整場課程會持續記錄同一位學員的答題成績。</p><input maxlength="28" placeholder="例如：小明" v-model.trim="nickInput" @keydown.enter="joinClass"><button class="rounded-action primary" style="width:100%" @click="joinClass">加入課堂</button><p class="small">無需註冊；同一手機、同一瀏覽器重整後仍可恢復暱稱與作答。</p></div>
+          <template v-else>
+            <div v-if="!activeSessionId||!currentQuestion" class="student-card" style="text-align:center;padding:45px 15px"><h2>⏳ 等待講師開始出題</h2><p>您已加入課堂，無需重新掃碼。</p><button class="rounded-action" @click="changeNickname">修改暱稱</button></div>
+            <div v-else class="quiz-screen">
+              <div class="flexline" style="justify-content:space-between"><b>第 {{session.state.questionIndex+1}} / {{session.order.length}} 題</b><span v-if="phase==='asking'" class="timer" :class="{expired:remainingSec===0}">{{currentQuestion.duration?remainingSec+' 秒':'不限時間'}}</span></div>
+              <h2>{{currentQuestion.text}}</h2>
+              <div class="options-grid">
+                <button v-for="(o,i) in currentQuestion.options" :key="i" class="quiz-option clickable" :class="{chosen:selection.includes(letters[i]),locked:!canStudentAnswer}" :style="{background:colors[i]}" :disabled="!canStudentAnswer||sending" @click="pickOption(letters[i])"><span v-if="phase==='revealed'&&currentQuestion.correct.includes(letters[i])" class="correct-icon">✓</span><span class="letter">{{letters[i]}}</span><span class="opt-text">{{o}}</span><span v-if="phase==='revealed'&&currentResult" class="vote-stat">{{resultCount(i)}} 票・{{resultPercent(i)}}%</span></button>
+              </div>
+              <div v-if="phase==='asking'" class="student-card" style="text-align:center;margin-bottom:0">
+                <div v-if="myAnswer"><b style="color:#15803d">✅ 您已成功送出：{{myAnswer.picks.join('、')}}</b><p class="small">{{answerMode==='quick'?'若講師仍開放作答，可再選其他選項修改。':'等待公布答案；已送出的答案無法再修改。'}}</p></div>
+                <div v-else class="small">{{currentQuestion.type==='multi'?'多選題：請選完後按確認送出。':answerMode==='quick'?'點選色塊即送出答案。':'先選擇答案，再按確認送出。'}}</div>
+                <button class="rounded-action primary" style="width:100%;margin-top:10px" v-if="answerMode==='confirm'||currentQuestion.type==='multi'" :disabled="!canStudentAnswer||selection.length===0||sending||!!myAnswer" @click="submitAnswer">{{sending?'儲存中...':'確認送出'}}</button>
+              </div>
+              <div v-if="phase==='closed'" class="student-card" style="text-align:center"><b>⏳ 本題已停止作答</b><p class="small">{{myAnswer?'您的作答已保留。':'本題未作答。'}}等待講師公布答案。</p></div>
+              <div v-if="phase==='revealed'" class="results-panel"><h3>✅ {{currentQuestion.type==='poll'?'意見調查結果':'正確答案：'+currentQuestion.correct.join('、')}}</h3><p v-if="currentQuestion.type!=='poll'">{{myAnswer?(isMyAnswerCorrect?'🎉 這題答對了！':'這題沒有答對，繼續加油！'):'本題未作答。'}}</p><div>{{currentQuestion.explanation||'講師正在解說，請等待下一題。'}}</div><p class="small">本題已作答 {{currentResult?.total||0}} 人</p></div>
+              <div v-if="phase==='waiting'" class="student-card" style="text-align:center">⏳ 等待講師開始本題</div>
+              <div v-if="phase==='finished'" class="student-card" style="text-align:center">🎉 本場課程已結束，感謝參與！</div>
+            </div>
+            <div class="student-card" v-if="activeSessionId&&studentRanking"><h3 style="margin:0 0 8px">🏆 我的累積表現</h3><div>答對 {{studentRanking.correct}} 題／已作答 {{studentRanking.answered}} 題（正確率 {{studentRanking.accuracy}}%）</div><div>目前排名：第 {{studentRanking.rank}} 名</div></div>
+            <div class="student-card" v-if="phase==='revealed'&&showLeaderboard&&leaderboard.length"><h3>🏆 課堂排行榜</h3><table class="leaderboard"><thead><tr><th>排名</th><th>暱稱</th><th>答對</th><th>正確率</th></tr></thead><tbody><tr v-for="r in leaderboard.slice(0,15)" :key="r.id"><td>{{r.rank}}</td><td>{{r.nickname}}</td><td>{{r.correct}}</td><td>{{r.accuracy}}%</td></tr></tbody></table></div>
+          </template>
+        </div>
+
+        
+        <div class="modal-scrim" v-if="confirmModal.show"><div class="modal-panel" style="max-width:440px"><h2>⚠️ 確認操作</h2><p>{{confirmModal.message}}</p><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="confirmModal.show=false">取消</button><button class="rounded-action danger" @click="executeConfirm">確定</button></div></div></div>
+        <div class="modal-scrim" v-if="renameModal.show"><div class="modal-panel" style="max-width:480px"><h2>✏️ 重新命名課程專案</h2><div class="field"><input v-model.trim="renameModal.newName" @keydown.enter="executeRename" placeholder="請輸入新名稱"></div><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="renameModal.show=false">取消</button><button class="rounded-action primary" @click="executeRename">儲存</button></div></div></div>
+        <div class="modal-scrim" v-if="questionModal.show"><div class="modal-panel"><h2>{{questionModal.id?'✏️ 編輯題目':'＋ 建立新題目'}}</h2>
+          <div class="field"><label>題目文字</label><textarea v-model.trim="questionModal.text" maxlength="1000" placeholder="請輸入題目"></textarea></div>
+          <div class="flexline"><div class="field" style="flex:1;min-width:155px"><label>題型</label><select v-model="questionModal.type" @change="onQuestionTypeChange"><option value="single">單選題</option><option value="multi">多選題</option><option value="boolean">是非題</option><option value="poll">意見投票（無正解）</option></select></div><div class="field" style="flex:1;min-width:155px"><label>作答秒數（0 = 不限時間）</label><input type="number" min="0" max="3600" v-model.number="questionModal.duration"></div></div>
+          <div class="field"><label>選項內容（選項位置及顏色固定）</label><div v-for="(o,i) in questionModal.options" :key="i" class="option-editor-row"><span class="letter-tag" :style="{background:colors[i]}">{{letters[i]}}</span><input type="text" maxlength="200" v-model.trim="questionModal.options[i]" :placeholder="'選項 '+letters[i]"><label v-if="questionModal.type!=='poll'" style="white-space:nowrap;display:flex;align-items:center;gap:4px;font-size:.85rem"><input type="checkbox" :checked="questionModal.correct.includes(letters[i])" @change="toggleCorrect(letters[i])" style="width:auto">正解</label></div></div>
+          <div class="field"><label>答案解析（公布答案後顯示）</label><textarea v-model.trim="questionModal.explanation" maxlength="2000" placeholder="可留空，讓講師現場解說"></textarea></div>
+          <div class="note">保存既有題目會先建立 before_edit 版本備份。已經開始的上課場次使用題目快照，不受後續修改影響。</div>
+          <div class="flexline" style="justify-content:flex-end;margin-top:15px"><button class="rounded-action" @click="questionModal.show=false">取消</button><button class="rounded-action primary" :disabled="working" @click="saveQuestion">💾 儲存題目</button></div>
+        </div></div>
+        <div v-if="toastMsg" class="toast-new">{{toastMsg}}</div>
+
+
+</div>
+<script>
+/*
+ * 課堂互動答題系統 v1.3 - 單檔 HTML / Vue 3 / Firebase RTDB
+ * 此前端保留原登入密碼流程以便移轉；前端密碼並不是可靠的管理員驗證。
+ * 若要正式上線，必須改採 Firebase Authentication + 限制性的 Database Rules。
+ * 本系統所有資料在 classroomQuizV1 路徑，絕不改寫舊 polls/pollsList。
+ */
+(() => {
+  'use strict';
+  const ROOT = 'classroomQuizV1';
+  const ADMIN_PASSWORD = '20150117'; // 相容原系統；正式公開部署前必須改用後端驗證
+  const letters = ['A', 'B', 'C', 'D'];
+  const colors = ['#dc2626', '#2563eb', '#ea580c', '#16a34a'];
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().replaceAll('-', '') : (Date.now().toString(36)+Math.random().toString(36).slice(2,12));
+  const now = () => Date.now();
+  // 以整場已公布（需判分）題數為分母；未作答算錯，避免只答一題產生虛高正確率。
+  // 每次公布均由已保存的逐題作答重新計算，重試／回頭公布時不會重複加分。
+  function summarizeClassResults(questions, results, answers, members) {
+    const published = Object.keys(results || {}).filter(id => questions?.[id] && questions[id].type !== 'poll');
+    const all = {};
+    for (const [id, member] of Object.entries(members || {})) {
+      let correct = 0, answered = 0, pollAnswered = 0;
+      for (const qid of Object.keys(results || {})) {
+        const picks = answers?.[qid]?.[id]?.picks;
+        if (!Array.isArray(picks) || !picks.length) continue;
+        const q = questions?.[qid];
+        if (!q) continue;
+        if (q.type === 'poll') { pollAnswered++; continue; }
+        answered++;
+        const expected = q.correct || [];
+        if (expected.length === picks.length && expected.every(x=>picks.includes(x))) correct++;
+      }
+      all[id] = {
+        nickname: member?.nickname || '學員',
+        correct, answered, graded: published.length, pollAnswered,
+        score: correct*100,
+        accuracy: published.length ? Math.round(1000*correct/published.length)/10 : 0
+      };
+    }
+    return all;
+  }
+  function sortClassRanking(board) {
+    const rows=Object.entries(board||{}).map(([id,v])=>({id,...v}));
+    rows.sort((a,b)=>b.correct-a.correct || b.score-a.score ||
+      (b.answered||0)-(a.answered||0) || a.nickname.localeCompare(b.nickname,'zh-TW') || a.id.localeCompare(b.id));
+    let rank=0,previous=null;
+    rows.forEach((r,i)=>{const key=`${r.correct}-${r.score}`;if(key!==previous){rank=i+1;previous=key;}r.rank=rank;});
+    return rows;
+  }
+  const blankState = () => ({questionId:'',questionIndex:0,phase:'waiting',openedAt:0,deadlineAt:0,showLeaderboard:false});
+  const blankSession = () => ({state:blankState(),questions:{},order:[],results:{},setName:'',members:{},leaderboard:{}});
+  const firebaseConfig = {
+    apiKey: 'AIzaSyDUPGhkiJgxeYDYHqEaXCYvKh2vdTGqypw',
+    authDomain: 'class-discussion-01.firebaseapp.com',
+    databaseURL: 'https://class-discussion-01-default-rtdb.firebaseio.com',
+    projectId: 'class-discussion-01',
+    storageBucket: 'class-discussion-01.firebasestorage.app',
+    messagingSenderId: '724687365020',
+    appId: '1:724687365020:web:380b5d85872dc2d9b85e59'
+  };
+  if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const refPath = p => db.ref(`${ROOT}/${p}`);
+  const { createApp } = Vue;
+
+  createApp({
+    data() { return {
+      isLoading:false, currentView:'login', desiredView:'lobby', loginPassword:'',
+      newPollName:'', pollsList:[], showArchives:false, archiveList:[],
+      renameModal:{show:false,id:'',newName:''},confirmModal:{show:false,message:'',action:null},
+      projectId:'',projectMeta:{},projectRuntime:{},sets:{},questions:{},selectedSetId:'',
+      newSetName:'',setAnswerMode:'quick',jumpQuestionId:'',
+      activeSessionId:'', session:blankSession(), currentAnswers:{}, myAnswer:null,
+      studentId:'',studentNickname:'',nickInput:'',selection:[],sending:false,
+      showQR:true,qrVisible:true,qrWidthPercent:25,working:false,toastMsg:'',errorMessage:'',serverOffset:0,
+      tickTime:Date.now(), questionModal:{show:false,id:'',type:'single',text:'',options:['','','',''],correct:['A'],duration:30,explanation:''},
+      letters,colors,
+      listenerGlobal:[],listenerProject:[],listenerSession:[],answerUnsub:null,myAnswerUnsub:null,
+      toastTimer:null,tickTimer:null,requestPublish:false,
+      fixedSessionId:'', historyIndex:0, historySessions:[], historySelectedId:'',
+      historyRecord:null, historyLoading:false,
+      reviewMode:false,reviewIndex:0,reviewSourceId:'',
+      revealProgress:1,revealAnimating:false,rankAnimationPhase:'after',rankOldRows:[],rankNewRows:[],
+      rankShifts:{},animatingQuestionId:'',revealRaf:null,revealSerial:0,
+      _initialResultsLoaded:false,_seenResults:{},pendingRank:[],
+      _currentQuestionAnswerReady:false
+    }; },
+    computed: {
+      activeSets() { return Object.entries(this.sets).map(([id,x])=>({id,...x})).filter(s=>!s.archived).sort((a,b)=>(a.order||0)-(b.order||0)); },
+      archivedSets() { return Object.entries(this.sets).map(([id,x])=>({id,...x})).filter(s=>s.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)); },
+      selectedSet() {return this.selectedSetId&&this.sets[this.selectedSetId]?{id:this.selectedSetId,...this.sets[this.selectedSetId]}:null;},
+      selectedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&!q.archived).sort((a,b)=>(a.order||0)-(b.order||0));},
+      archivedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&q.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));},
+      currentQuestionId(){return this.fixedSessionId ? (this.session.order?.[this.historyIndex]||'') : (this.session.state?.questionId||'');},
+      reviewData(){return this.historyRecord || this.session;},
+      reviewQuestionId(){return this.reviewData?.order?.[this.reviewIndex]||'';},
+      reviewQuestion(){return this.reviewData?.questions?.[this.reviewQuestionId]||null;},
+      reviewResult(){return this.reviewData?.results?.[this.reviewQuestionId]||null;},
+      reviewCount(){return this.reviewData?.order?.length||0;},
+      reviewResultTotal(){return this.reviewResult?.total||0;},
+      reviewRanking(){
+        const data=this.reviewData,r=this.reviewResult;
+        if(!r)return [];
+        if(r.rankingAfter)return sortClassRanking(r.rankingAfter);
+        const cutoff=Number(r.publishedAt||0);
+        const done=Object.fromEntries(Object.entries(data?.results||{}).filter(([,v])=>v.publishedAt<=cutoff));
+        return sortClassRanking(summarizeClassResults(data.questions,done,data.answers||{},data.members||{}));
+      },
+      displayRankingRows(){
+        if(this.fixedSessionId){const r=this.currentResult;return sortClassRanking(r?.rankingAfter||this.session.leaderboard);}
+        if(!this.revealAnimating || this.animatingQuestionId!==this.currentQuestionId)return this.leaderboard;
+        return this.rankAnimationPhase==='before'?this.rankOldRows:this.rankNewRows;
+      },
+      showLiveRank(){return this.phase==='revealed'||this.isReview;},
+      isLastQuestion(){return this.session.order?.length>0&&this.session.state.questionIndex===this.session.order.length-1;},
+      displayedCorrectCount(){return this.countReveal(this.currentResult?.correctCount||0);},
+      reviewIsCurrent(){return this.reviewSourceId===this.activeSessionId;} ,
+      currentQuestion(){return (this.currentQuestionId&&this.session.questions?.[this.currentQuestionId])||null;},
+      remainingSec() {if(!this.currentQuestion?.duration)return 0;const dl=this.session.state?.deadlineAt||0;if(!dl)return 0;return Math.max(0,Math.ceil((dl-(this.tickTime+this.serverOffset))/1000));},
+      phase() {if(this.fixedSessionId)return this.currentResult?'revealed':'closed';if(this.currentResult)return 'revealed';const s=this.session.state?.phase||'waiting';if(s==='finished')return 'closed';if(s==='asking'&&this.currentQuestion?.duration&&this.remainingSec<=0)return 'closed';return s;},
+      phaseLabel() {const prefix = (this.fixedSessionId||this.session.state?.finishedAt)?'📚 課後回顧｜':'';return prefix+(({waiting:'⏳ 等待開始',asking:'🟢 正在作答',closed:'⏸ 等待公布',revealed:'✅ 答案已公布',finished:'🏁 場次已結束'})[this.phase]||'等待開始');},
+      canOpen(){return !this.fixedSessionId&&!this.session.state?.finishedAt&&!this.currentResult&&!!this.currentQuestion&&['waiting','closed'].includes(this.phase);},
+      canPublish(){return !this.fixedSessionId&&!this.currentResult&&!!this.currentQuestion&&['asking','closed'].includes(this.phase);},
+      canNext(){return !this.fixedSessionId&&!this.session.state?.finishedAt&&this.phase==='revealed'&&!!this.activeSessionId&&this.session.order.length>this.session.state.questionIndex+1;},
+      canPrevious(){return this.activeSessionId&&this.session.state.questionIndex>0;},
+      currentResult(){return this.session.results?.[this.currentQuestionId]||null;},
+      currentAnswerCount(){return Object.keys(this.currentAnswers||{}).length;},
+      memberCount(){return Object.keys(this.session.members||{}).length;},
+      showLeaderboard:{get(){return !!this.session.state?.showLeaderboard;},set(v){if(this.activeSessionId)this.safeWrite(refPath(`projects/${this.projectId}/sessions/${this.activeSessionId}/state/showLeaderboard`).set(!!v),'切換排行榜失敗');}},
+      leaderboard(){return sortClassRanking(this.session.leaderboard);},
+      gradedQuestionCount(){return Object.keys(this.session.results||{}).filter(qid=>this.session.questions?.[qid]&&this.session.questions[qid].type!=='poll').length;},
+      isReview(){return !!(this.fixedSessionId||this.session.state?.finishedAt);},
+      historyQuestionId(){return this.historyRecord?.order?.[this.historyIndex]||'';},
+      historyQuestion(){return this.historyRecord?.questions?.[this.historyQuestionId]||null;},
+      historyResult(){return this.historyRecord?.results?.[this.historyQuestionId]||null;},
+      historyAnswerCount(){return Object.keys(this.historyRecord?.answers?.[this.historyQuestionId]||{}).length;},
+      historyRanking(){if(!this.historyRecord)return [];return sortClassRanking(summarizeClassResults(this.historyRecord.questions,this.historyRecord.results,this.historyRecord.answers,this.historyRecord.members));},
+      studentRanking(){return this.leaderboard.find(x=>x.id===this.studentId)||null;},
+      answerMode(){return this.session.answerMode||'quick';},
+      canStudentAnswer(){return this.phase==='asking'&&!!this.currentQuestion&&!!this.studentNickname&&!this.sending&&(!this.myAnswer||(this.answerMode==='quick'&&this.currentQuestion?.type==='single'));},
+      isMyAnswerCorrect(){if(!this.myAnswer||!this.currentQuestion)return false;const want=this.currentQuestion.correct||[];return this.currentQuestion.type==='poll'?false:(want.length===this.myAnswer.picks.length&&want.every(x=>this.myAnswer.picks.includes(x)));}
+    },
+    watch: {
+      selectedSetId(){this.setAnswerMode=this.sets[this.selectedSetId]?.answerMode||'quick';},
+      currentQuestionId() {this.stopRevealAnimation();this.bindCurrentAnswer();this.selection=[];this.myAnswer=null;this.jumpQuestionId=this.currentQuestionId;},
+      projectId() {this.$nextTick(()=>this.renderQR());},
+      qrVisible(){this.$nextTick(()=>this.renderQR());}
+    },
+    mounted(){
+      const p=new URLSearchParams(location.search);this.projectId=p.get('project')||'';
+      const role=p.get('role')||'student';this.desiredView=this.projectId?(['teacher','display','student'].includes(role)?role:'student'):'lobby';
+      this.fixedSessionId=this.desiredView==='display'?(p.get('history')||''):'';
+      if(this.fixedSessionId)this.qrVisible=false;
+      const stored=localStorage.getItem('classroom_quiz_admin_until');
+      if((this.desiredView==='teacher'||this.fixedSessionId) && !(stored&&Number(stored)>now()))this.currentView='login';
+      else if(this.desiredView==='lobby')this.currentView='login';
+      else this.currentView=this.desiredView;
+      if(this.projectId){
+        try{this.studentId=localStorage.getItem(`cq_id_${this.projectId}`)||'';this.studentNickname=localStorage.getItem(`cq_nick_${this.projectId}`)||'';}catch(e){}
+        this.attachProject();
+      }
+      this.tickTimer=setInterval(()=>{this.tickTime=now();if(this.currentView==='teacher'&&!this.isReview&&!this.currentResult&&this.activeSessionId&&this.session.state?.phase==='asking'&&this.currentQuestion?.duration&&this.remainingSec===0){this.closeQuestion(true);}},500);
+      this.subscribe(this.listenerGlobal,db.ref('.info/serverTimeOffset'),v=>this.serverOffset=v||0);
+      this.$nextTick(()=>this.renderQR());
+    },
+    beforeUnmount(){this.stopRevealAnimation();this.clearListeners(this.listenerGlobal);this.clearListeners(this.listenerProject);this.clearListeners(this.listenerSession);this.clearAnswerListener();if(this.tickTimer)clearInterval(this.tickTimer);if(this.toastTimer)clearTimeout(this.toastTimer);},
+    methods: {
+      subscribe(collection,ref,fn){const handler=snap=>fn(snap.val(),snap);const error=e=>{this.errorMessage='雲端同步失敗：'+e.message;};ref.on('value',handler,error);collection.push(()=>ref.off('value',handler));},
+      clearListeners(l){for(const f of l.splice(0))try{f();}catch(e){}},
+      clearAnswerListener(){if(this.answerUnsub){this.answerUnsub();this.answerUnsub=null;}if(this.myAnswerUnsub){this.myAnswerUnsub();this.myAnswerUnsub=null;}this.currentAnswers={};this.myAnswer=null;},
+      async safeWrite(promise,err='雲端寫入失敗'){try{await promise;return true;}catch(e){this.errorMessage=err+'：'+e.message;this.showMessage('❌ '+err);return false;}},
+      showMessage(msg){this.toastMsg=msg;if(this.toastTimer)clearTimeout(this.toastTimer);this.toastTimer=setTimeout(()=>this.toastMsg='',3500);},
+      askConfirm(message,action){this.confirmModal={show:true,message,action};},
+      executeConfirm(){const a=this.confirmModal.action;this.confirmModal.show=false;this.confirmModal.action=null;if(a)Promise.resolve().then(a).catch(e=>this.showMessage('❌ '+e.message));},
+      login(){if(this.loginPassword!==ADMIN_PASSWORD){this.showMessage('❌ 密碼錯誤，請重新輸入！');this.loginPassword='';return;}localStorage.setItem('classroom_quiz_admin_until',String(now()+8*3600*1000));this.loginPassword='';this.currentView=this.desiredView;if(this.currentView==='lobby')this.attachLobby();else if(this.currentView==='teacher'){this.attachTeacher();this.$nextTick(()=>this.renderQR());}else this.$nextTick(()=>this.renderQR());},
+      goLobby(){location.href=location.pathname;},
+      attachLobby(){this.clearListeners(this.listenerGlobal.filter(()=>false));if(this._lobbyAttached)return;this._lobbyAttached=true;this.subscribe(this.listenerGlobal,refPath('projectsList'),val=>{this.pollsList=Object.entries(val||{}).map(([id,p])=>({id,...p})).sort((a,b)=>b.createdAt-a.createdAt);});},
+      attachProject(){
+        this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/meta`),val=>{if(val){this.projectMeta=val;this.errorMessage='';}else this.errorMessage='找不到此專案，或專案已封存。';});
+        this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/runtime`),val=>{this.projectRuntime=val||{};const id=this.fixedSessionId||(val?.activeSessionId||'');if(id!==this.activeSessionId){this.activeSessionId=id;this.bindSession();}});
+        if(this.currentView==='teacher')this.attachTeacher();
+      },
+      attachTeacher(){if(this._teacherAttached||!this.projectId)return;this._teacherAttached=true;
+        this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/sets`),v=>{this.sets=v||{};if(!this.sets[this.selectedSetId]||this.sets[this.selectedSetId]?.archived)this.selectedSetId=this.activeSets[0]?.id||'';});
+        this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/questions`),v=>this.questions=v||{});
+        this.$nextTick(()=>this.renderQR());
+      },
+      bindSession(){this.stopRevealAnimation();this.clearListeners(this.listenerSession);this.clearAnswerListener();this.session=blankSession();this.selection=[];
+        this._initialResultsLoaded=false;this._seenResults={};this.reviewMode=false;
+        if(!this.activeSessionId)return;
+        const base=`projects/${this.projectId}/sessions/${this.activeSessionId}`;
+        this.subscribe(this.listenerSession,refPath(base+'/state'),v=>this.session.state=v||blankState());
+        this.subscribe(this.listenerSession,refPath(base+'/questions'),v=>this.session.questions=v||{});
+        this.subscribe(this.listenerSession,refPath(base+'/order'),v=>this.session.order=v||[]);
+        this.subscribe(this.listenerSession,refPath(base+'/setName'),v=>this.session.setName=v||'');
+        this.subscribe(this.listenerSession,refPath(base+'/answerMode'),v=>this.session.answerMode=v||'quick');
+        this.subscribe(this.listenerSession,refPath(base+'/results'),v=>{
+          const fresh=v||{};
+          if(this._initialResultsLoaded && !this.fixedSessionId && (this.currentView==='teacher'||this.currentView==='display')){
+            for(const [qid,result] of Object.entries(fresh)){
+              if(!this._seenResults[qid] && qid===this.session.state?.questionId){
+                this.startRevealAnimation(qid,result,this.session.leaderboard||{});
+              }
+            }
+          }
+          this._seenResults=Object.fromEntries(Object.keys(fresh).map(qid=>[qid,true]));
+          this.session.results=fresh;
+          this._initialResultsLoaded=true;
+        });
+        this.subscribe(this.listenerSession,refPath(base+'/leaderboard'),v=>{
+          this.session.leaderboard=v||{};
+          if(this.revealAnimating&&this.animatingQuestionId===this.currentQuestionId){
+            this.prepareRankAnimation(this.session.leaderboard);
+          }
+        });
+        if(this.currentView!=='student'){this.subscribe(this.listenerSession,refPath(base+'/members'),v=>this.session.members=v||{});}else if(this.studentNickname)this.registerMember();
+        this.$nextTick(()=>this.renderQR());
+      },
+      bindCurrentAnswer(){this.clearAnswerListener();if(!this.activeSessionId||!this.currentQuestionId)return;
+        const base=`projects/${this.projectId}/sessions/${this.activeSessionId}/answers/${this.currentQuestionId}`;
+        if(this.currentView!=='student'){
+          const ref=refPath(base);const fn=s=>this.currentAnswers=s.val()||{};ref.on('value',fn,e=>this.errorMessage='讀取答題統計失敗：'+e.message);this.answerUnsub=()=>ref.off('value',fn);
+        }else if(this.studentId){const r=refPath(base+'/'+this.studentId);const fn=s=>{this.myAnswer=s.val()||null;if(this.myAnswer)this.selection=[...this.myAnswer.picks];};r.on('value',fn,e=>this.errorMessage='讀取我的作答失敗：'+e.message);this.myAnswerUnsub=()=>r.off('value',fn);}
+      },
+      getLink(id,role){const url=new URL(location.href);url.searchParams.set('project',id||this.projectId);if(role==='student')url.searchParams.delete('role');else url.searchParams.set('role',role);url.searchParams.delete('poll');url.searchParams.delete('history');return url.href;},
+      async copyLink(id,role){try{const value=this.getLink(id,role);if(navigator.clipboard&&location.protocol!=='file:')await navigator.clipboard.writeText(value);else{const n=document.createElement('textarea');n.value=value;document.body.appendChild(n);n.select();document.execCommand('copy');n.remove();}this.showMessage('✅ 已複製連結');}catch(e){prompt('請手動複製連結',this.getLink(id,role));}},
+      renderQR(){if(typeof QRCode==='undefined')return;const el=this.currentView==='teacher'?this.$refs.teacherQr:this.currentView==='display'?this.$refs.displayQr:null;if(!el||!this.projectId)return;el.innerHTML='';new QRCode(el,{text:this.getLink(this.projectId,'student'),width:240,height:240,colorDark:'#0f172a',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});},
+      openDisplay(){window.open(this.getLink(this.projectId,'display'),'_blank','noopener,noreferrer');},
+      toggleFullscreen(){if(!document.fullscreenElement)document.documentElement.requestFullscreen?.().catch(()=>this.showMessage('瀏覽器未允許全螢幕'));else document.exitFullscreen?.();},
+      typeLabel(t){return ({single:'單選題',multi:'多選題',boolean:'是非題',poll:'意見投票'})[t]||t;},
+      questionCount(sid){return Object.values(this.questions||{}).filter(q=>q.setId===sid&&!q.archived).length;},
+      async createPoll(){const name=this.newPollName.trim();if(!name)return this.showMessage('請輸入課程專案名稱');this.working=true;
+        try{const id=refPath('projects').push().key;const meta={name,createdAt:now()};const patch={};patch[`${ROOT}/projectsList/${id}`]=meta;patch[`${ROOT}/projects/${id}/meta`]=meta;await db.ref().update(patch);this.newPollName='';this.showMessage('✅ 課程專案建立成功');}
+        catch(e){this.showMessage('❌ 建立失敗：'+e.message);}finally{this.working=false;}
+      },
+      openRename(p){this.renameModal={show:true,id:p.id,newName:p.name};},
+      async executeRename(){const n=this.renameModal.newName.trim(),id=this.renameModal.id;if(!n)return this.showMessage('⚠️ 名稱不可空白');
+        try{const b=refPath(`projects/${id}`);const old=(await b.child('meta').once('value')).val();if(!old)throw Error('找不到原專案');const backupId=b.child('backups/meta').push().key;const changes={};changes[`${ROOT}/projects/${id}/backups/meta/${backupId}`]={old,action:'before_rename',savedAt:now()};changes[`${ROOT}/projects/${id}/meta/name`]=n;changes[`${ROOT}/projectsList/${id}/name`]=n;await db.ref().update(changes);this.renameModal.show=false;this.showMessage('✅ 名稱已修改');}catch(e){this.showMessage('❌ 更名失敗：'+e.message);}
+      },
+      duplicatePoll(p){this.askConfirm(`複製「${p.name}」及所有題組、題目嗎？不複製學員作答。`,async()=>{this.working=true;
+        try{const orig=(await refPath(`projects/${p.id}`).once('value')).val();if(!orig)throw Error('找不到原專案');const id=refPath('projects').push().key;const meta={name:p.name+' (複製)',createdAt:now()};const data={meta,sets:clone(orig.sets||{}),questions:clone(orig.questions||{})};const changes={};changes[`${ROOT}/projectsList/${id}`]=meta;changes[`${ROOT}/projects/${id}`]=data;await db.ref().update(changes);this.showMessage('✅ 已複製題組與題目，不含舊成績');}catch(e){this.showMessage('❌ 複製失敗：'+e.message);}finally{this.working=false;}
+      });},
+      deletePoll(id){this.askConfirm('確定封存這個專案？系統會將題組、所有場次、成績一起原子封存，之後可完整還原。',async()=>{this.working=true;
+        try{const data=(await refPath(`projects/${id}`).once('value')).val();const meta=(await refPath(`projectsList/${id}`).once('value')).val();if(!data||!meta)throw Error('資料不完整，為保護資料已取消封存');const archiveId=refPath('archives').push().key;const changes={};changes[`${ROOT}/archives/${archiveId}`]={projectId:id,projectData:data,projectMeta:meta,archivedAt:now()};changes[`${ROOT}/archiveList/${archiveId}`]={projectId:id,name:meta.name,archivedAt:now()};changes[`${ROOT}/projectsList/${id}`]=null;changes[`${ROOT}/projects/${id}`]=null;await db.ref().update(changes);this.showMessage('✅ 已封存，可從首頁還原');}
+        catch(e){this.showMessage('❌ 封存失敗：'+e.message);}finally{this.working=false;}
+      });},
+      async toggleArchives(){this.showArchives=!this.showArchives;if(!this.showArchives)return;try{const v=(await refPath('archiveList').once('value')).val()||{};this.archiveList=Object.entries(v).map(([archiveId,x])=>({archiveId,...x,deletedAt:x.archivedAt})).sort((a,b)=>b.archivedAt-a.archivedAt);}catch(e){this.showMessage('❌ 讀取封存失敗：'+e.message);}},
+      restoreDeletedPoll(aid){this.askConfirm('還原完整專案與全部歷史成績？若原 ID 已存在，將停止避免覆寫。',async()=>{
+        try{const a=(await refPath(`archives/${aid}`).once('value')).val();if(!a?.projectId||!a.projectData||!a.projectMeta)throw Error('備份不完整');const id=a.projectId;if((await refPath(`projects/${id}`).once('value')).exists()||(await refPath(`projectsList/${id}`).once('value')).exists())throw Error('此 ID 已存在，不會覆寫');const changes={};changes[`${ROOT}/projects/${id}`]=a.projectData;changes[`${ROOT}/projectsList/${id}`]=a.projectMeta;changes[`${ROOT}/archiveList/${aid}`]=null;changes[`${ROOT}/archives/${aid}/restoredAt`]=now();await db.ref().update(changes);this.archiveList=this.archiveList.filter(x=>x.archiveId!==aid);this.showMessage('✅ 已還原專案、題組與成績');}catch(e){this.showMessage('❌ 還原失敗：'+e.message);}
+      });},
+      async createSet(){const n=this.newSetName.trim();if(!n)return this.showMessage('請輸入題組名稱');try{const r=refPath(`projects/${this.projectId}/sets`).push();await r.set({name:n,order:now(),createdAt:now(),archived:false,answerMode:'quick'});this.selectedSetId=r.key;this.newSetName='';this.showMessage('✅ 題組已建立');}catch(e){this.showMessage('❌ '+e.message);}},
+      async versionedUpdate(path,oldData,newData,action){const backupId=refPath(`projects/${this.projectId}/backups`).push().key;const changes={};changes[`${ROOT}/projects/${this.projectId}/backups/${backupId}`]={path,old:clone(oldData),action,savedAt:now()};changes[`${ROOT}/${path}`]=newData;await db.ref().update(changes);},
+      async renameSet(s){const name=prompt('修改題組名稱',s.name);if(name===null)return;if(!name.trim())return this.showMessage('題組名稱不可空白');try{const p=`projects/${this.projectId}/sets/${s.id}`;await this.versionedUpdate(p,this.sets[s.id],{...this.sets[s.id],name:name.trim(),updatedAt:now()},'before_rename_set');this.showMessage('✅ 題組已更新');}catch(e){this.showMessage('❌ '+e.message);}},
+      async saveAnswerMode(){if(!this.selectedSet)return;try{const p=`projects/${this.projectId}/sets/${this.selectedSetId}`;await this.versionedUpdate(p,this.sets[this.selectedSetId],{...this.sets[this.selectedSetId],answerMode:this.setAnswerMode},'before_answer_mode_change');this.showMessage('✅ 作答方式已儲存');}catch(e){this.showMessage('❌ '+e.message);}},
+      archiveSet(s){this.askConfirm(`封存「${s.name}」嗎？題目不會刪除，隨時可還原。`,async()=>{try{const p=`projects/${this.projectId}/sets/${s.id}`;await this.versionedUpdate(p,this.sets[s.id],{...this.sets[s.id],archived:true,updatedAt:now()},'before_archive_set');this.showMessage('✅ 已封存題組');}catch(e){this.showMessage('❌ '+e.message);}});},
+      async restoreSet(s){try{const p=`projects/${this.projectId}/sets/${s.id}`;await this.versionedUpdate(p,this.sets[s.id],{...this.sets[s.id],archived:false,updatedAt:now()},'before_restore_set');this.selectedSetId=s.id;this.showMessage('✅ 題組已還原');}catch(e){this.showMessage('❌ '+e.message);}},
+      async cloneSet(s){try{const newId=refPath(`projects/${this.projectId}/sets`).push().key;const qs=Object.entries(this.questions).filter(([,q])=>q.setId===s.id);const changes={};changes[`${ROOT}/projects/${this.projectId}/sets/${newId}`]={...clone(this.sets[s.id]),name:s.name+' (複製)',order:now(),createdAt:now(),archived:false};for(const [,q] of qs){const id=refPath(`projects/${this.projectId}/questions`).push().key;changes[`${ROOT}/projects/${this.projectId}/questions/${id}`]={...clone(q),setId:newId,createdAt:now()};}await db.ref().update(changes);this.selectedSetId=newId;this.showMessage('✅ 題組與題目已複製');}catch(e){this.showMessage('❌ '+e.message);}},
+      makeQuestionModal(q){return {show:true,id:q?.id||'',type:q?.type||'single',text:q?.text||'',options:[...(q?.options||['','','',''])],correct:[...(q?.correct||['A'])],duration:q?.duration??30,explanation:q?.explanation||''};},
+      openNewQuestion(){if(!this.selectedSetId)return;this.questionModal=this.makeQuestionModal(null);},
+      editQuestion(q){this.questionModal=this.makeQuestionModal(q);},
+      onQuestionTypeChange(){const m=this.questionModal;if(m.type==='boolean'){m.options=['正確','錯誤'];m.correct=['A'];}else if(m.options.length===2){m.options=['','','',''];m.correct=['A'];}if(m.type==='poll')m.correct=[];if(m.type==='single'&&m.correct.length!==1)m.correct=['A'];},
+      toggleCorrect(l){const m=this.questionModal;if(m.type==='poll')return;if(m.type==='single'||m.type==='boolean')m.correct=[l];else if(m.correct.includes(l))m.correct=m.correct.filter(x=>x!==l);else m.correct.push(l);},
+      async saveQuestion(){const m=this.questionModal;if(!m.text.trim())return this.showMessage('請輸入題目');if(m.options.some(x=>!x.trim()))return this.showMessage('所有選項都需要文字');if(m.type!=='poll'&&m.correct.length===0)return this.showMessage('請選擇至少一個正確答案');if(!Number.isFinite(Number(m.duration))||m.duration<0||m.duration>3600)return this.showMessage('時間請輸入 0～3600 秒');this.working=true;
+        try{const body={setId:this.selectedSetId,type:m.type,text:m.text.trim(),options:[...m.options],correct:m.type==='poll'?[]:[...m.correct].sort(),duration:Math.floor(m.duration),explanation:m.explanation.trim(),updatedAt:now(),archived:false};if(m.id){const old=this.questions[m.id];if(!old)throw Error('找不到原題目');const p=`projects/${this.projectId}/questions/${m.id}`;await this.versionedUpdate(p,old,{...old,...body},'before_edit_question');}else{const qref=refPath(`projects/${this.projectId}/questions`).push();await qref.set({...body,createdAt:now(),order:now()});}m.show=false;this.showMessage('✅ 題目已儲存');}catch(e){this.showMessage('❌ 題目儲存失敗：'+e.message);}finally{this.working=false;}
+      },
+      async cloneQuestion(q){try{const r=refPath(`projects/${this.projectId}/questions`).push();await r.set({...clone(this.questions[q.id]),text:q.text+'（複製）',order:now(),createdAt:now()});this.showMessage('✅ 已複製題目');}catch(e){this.showMessage('❌ '+e.message);}},
+      archiveQuestion(q){this.askConfirm(`封存這道題目？舊場次及得分不受影響，題目可還原。`,async()=>{try{const p=`projects/${this.projectId}/questions/${q.id}`;await this.versionedUpdate(p,this.questions[q.id],{...this.questions[q.id],archived:true,updatedAt:now()},'before_archive_question');this.showMessage('✅ 題目已封存');}catch(e){this.showMessage('❌ '+e.message);}});},
+      async restoreQuestion(q){try{const p=`projects/${this.projectId}/questions/${q.id}`;await this.versionedUpdate(p,this.questions[q.id],{...this.questions[q.id],archived:false,updatedAt:now()},'before_restore_question');this.showMessage('✅ 題目已還原');}catch(e){this.showMessage('❌ '+e.message);}},
+      async moveQuestion(q,step){const list=this.selectedQuestions,i=list.findIndex(x=>x.id===q.id),other=list[i+step];if(!other)return;
+        try{const q1=this.questions[q.id],q2=this.questions[other.id],old=clone({[q.id]:q1,[other.id]:q2});const base=`${ROOT}/projects/${this.projectId}`;const b=refPath(`projects/${this.projectId}/backups`).push().key;const a=q1.order||0,c=q2.order||0;const upd={};upd[`${base}/backups/${b}`]={path:`questions`,old,action:'before_reorder',savedAt:now()};upd[`${base}/questions/${q.id}/order`]=c;upd[`${base}/questions/${other.id}/order`]=a;await db.ref().update(upd);this.showMessage('✅ 已調整順序');}catch(e){this.showMessage('❌ '+e.message);}
+      },
+      startSession(){if(!this.selectedSet||!this.selectedQuestions.length)return this.showMessage('請先選擇有題目的題組');const work=()=>this.createSession();if(this.activeSessionId)this.askConfirm('開始全新場次？原有場次、作答、排名與結果都會保留在歷史紀錄中，新場次會由第一題直接開始。',work);else work();},
+      async createSession(){this.working=true;
+        try{const id=refPath(`projects/${this.projectId}/sessions`).push().key;const questions={};const order=[];for(const q of this.selectedQuestions){const {id:qid,...content}=q;questions[qid]=clone(content);order.push(qid);}const data={setId:this.selectedSetId,setName:this.selectedSet.name,answerMode:this.selectedSet.answerMode||'quick',createdAt:now(),questions,order,state:{...blankState(),questionId:order[0],questionIndex:0,phase:'asking',openedAt:now(),deadlineAt:questions[order[0]].duration?now()+questions[order[0]].duration*1000:0,startedQuestions:{[order[0]]:true}},members:{}};const upd={};upd[`${ROOT}/projects/${this.projectId}/sessions/${id}`]=data;upd[`${ROOT}/projects/${this.projectId}/runtime`]={activeSessionId:id,updatedAt:now()};await db.ref().update(upd);this.closeReview();this.showMessage('✅ 已開始第一題，請學員作答');}
+        catch(e){this.showMessage('❌ 建立場次失敗：'+e.message);}finally{this.working=false;}
+      },
+      async changeState(mutator){if(!this.activeSessionId)return false;const r=refPath(`projects/${this.projectId}/sessions/${this.activeSessionId}/state`);try{const tx=await r.transaction(s=>{if(!s)return;return mutator(s);},undefined,false);return tx.committed;}catch(e){this.showMessage('❌ 無法變更課程狀態：'+e.message);return false;}},
+      async openQuestion(){if(!this.canOpen||this.working)return;this.working=true;try{const duration=this.currentQuestion.duration||0;const opened=now()+this.serverOffset;const published=!!this.currentResult;if(published){this.showMessage('此題已公布過答案，為避免重複計分無法再次開放；請建立新場次。');return;}const ok=await this.changeState(s=>!s.finishedAt&&s.questionId===this.currentQuestionId&&!this.currentResult&&['waiting','closed'].includes(s.phase)?{...s,phase:'asking',openedAt:opened,deadlineAt:duration?opened+duration*1000:0,startedQuestions:{...(s.startedQuestions||{}),[this.currentQuestionId]:true}}:undefined);if(ok)this.showMessage('🟢 已開放本題作答');}finally{this.working=false;}},
+      async closeQuestion(automatic=false){if(this.currentResult||this.session.state.phase!=='asking'||this.working)return;this.working=true;try{const ok=await this.changeState(s=>s.phase==='asking'?{...s,phase:'closed',closedAt:now()+this.serverOffset}:undefined);if(ok&&!automatic)this.showMessage('⏸ 已停止收答；可手動公布結果');}finally{this.working=false;}},
+      publishResult(){if(!this.canPublish||this.working)return;this.working=true;this.performPublish().finally(()=>this.working=false);},
+      async performPublish(){
+        try {
+          const sid=this.activeSessionId, qid=this.currentQuestionId;
+          if(!sid||!qid)return;
+          const base=`projects/${this.projectId}/sessions/${sid}`;
+          // 讀同一場次的單一快照，重新彙總各題已公布的結果與個人成績。
+          const snapshot=(await refPath(base).once('value')).val();
+          if(!snapshot||snapshot.state?.questionId!==qid||!['asking','closed'].includes(snapshot.state.phase))throw Error('題目已切換或不在可公布狀態');
+          if(snapshot.results?.[qid])throw Error('本題已公布，無需重複計分');
+          const q=snapshot.questions?.[qid];if(!q)throw Error('找不到本題快照');
+          const answers=snapshot.answers||{}, members=snapshot.members||{};
+          const votes=answers[qid]||{};
+          const counts=(q.options||[]).map(()=>0);
+          let total=0,correctCount=0;
+          for(const ans of Object.values(votes)){
+            const picks=ans?.picks;
+            if(!Array.isArray(picks)||!picks.length)continue;
+            total++;
+            for(const pick of new Set(picks)){
+              const idx=letters.indexOf(pick);
+              if(idx>=0&&idx<counts.length)counts[idx]++;
+            }
+            if(q.type!=='poll'&&q.correct?.length===picks.length&&q.correct.every(x=>picks.includes(x)))correctCount++;
+          }
+          const publishedAt=now()+this.serverOffset;
+          const result={counts,total,correctCount,correct:[...(q.correct||[])],publishedAt};
+          const allResults={...(snapshot.results||{}),[qid]:result};
+          const board=summarizeClassResults(snapshot.questions,allResults,answers,members);
+          // 逐題保留排名快照，供課後逐題回顧（無動畫）及現場名次變動動畫使用。
+          result.rankingBefore=snapshot.leaderboard||{};
+          result.rankingAfter=board;
+          // 設為 true 可支援舊有檢視操作；新版「公布」後無論如何都自動顯示完整排行榜。
+          const changes={};
+          changes[`${ROOT}/${base}/results/${qid}`]=result;
+          changes[`${ROOT}/${base}/leaderboard`]=board;
+          changes[`${ROOT}/${base}/state/phase`]='revealed';
+          changes[`${ROOT}/${base}/state/revealedAt`]=now()+this.serverOffset;
+          changes[`${ROOT}/${base}/state/showLeaderboard`]=true;
+          const latest=(await refPath(base+'/state').once('value')).val();
+          if(latest?.questionId!==qid||!['asking','closed'].includes(latest.phase))throw Error('題目狀態已變更，取消公布');
+          if((await refPath(base+`/results/${qid}`).once('value')).exists())throw Error('另一個講師畫面已公布此題');
+          await db.ref().update(changes);
+          this.showMessage('✅ 已公布本題結果，全班正確率排行榜同步更新');
+        }catch(e){this.showMessage('❌ 公布結果失敗：'+e.message);}
+      },
+      async switchQuestion(index){
+        const qid=this.session.order[index];if(!qid||this.fixedSessionId)return false;
+        const current=this.currentQuestionId;
+        const q=this.session.questions?.[qid];if(!q)return false;
+        const opened=now()+this.serverOffset;
+        const duration=q.duration||0;
+        const ok=await this.changeState(state=>{
+          if(state.questionId!==current || state.finishedAt || !this.session.results?.[current])return;
+          if(index!==state.questionIndex+1)return;
+          if(this.session.results?.[qid])return; // 已公布過的題目不可當作新題重測
+          return {...state,questionIndex:index,questionId:qid,phase:'asking',openedAt:opened,
+            deadlineAt:duration?opened+duration*1000:0,
+            startedQuestions:{...(state.startedQuestions||{}),[qid]:true}};
+        });
+        if(ok){this.showMessage('🟢 已進入第 '+(index+1)+' 題並開放作答');return true;}
+        this.showMessage('⚠️ 無法前往下一題，請確認上一題已公布');return false;
+      },
+      nextQuestion(){if(!this.canNext||this.working)return;this.working=true;this.switchQuestion(this.session.state.questionIndex+1).finally(()=>this.working=false);},
+      previousQuestion(){this.showMessage('請使用「逐題回看」瀏覽先前結果，不會改變目前出題進度。');},
+      jumpQuestion(){this.showMessage('進行測驗時依順序出題；回顧時可自由跳至任一題。');},
+      finishSession(){
+        if(this.fixedSessionId||!this.activeSessionId)return;
+        this.askConfirm('確定將本場標示為已結束？全部答題與逐題結果會原封保留，講師可隨時逐題回看。',async()=>{
+          const ok=await this.changeState(st=>st.finishedAt?undefined:{...st,phase:this.session.results?.[st.questionId]?'revealed':'closed',finishedAt:now()+this.serverOffset,deadlineAt:0});
+          if(ok){this.showMessage('📚 已結束本場，請按「逐題回看」');await this.openCurrentReview();}
+        });
+      },
+      async openCurrentReview(){
+        if(!this.activeSessionId)return this.showMessage('目前沒有可回顧的場次');
+        this.historyRecord=null;this.historySelectedId='';
+        return this.openReviewSession(this.activeSessionId);
+      },
+      async openReviewSession(id){
+        if(!id)return;
+        this.historyLoading=true;
+        try{
+          const v=(await refPath(`projects/${this.projectId}/sessions/${id}`).once('value')).val();
+          if(!v)throw Error('找不到場次資料');
+          this.historyRecord=v;this.historySelectedId=id;this.reviewSourceId=id;
+          this.reviewIndex=0;this.reviewMode=true;
+          this.stopRevealAnimation();
+          this.showMessage('📚 已進入逐題回看，不播放動畫，也不改變正在出題的場次');
+        }catch(e){this.showMessage('❌ 回顧載入失敗：'+e.message);}finally{this.historyLoading=false;}
+      },
+      closeReview(){this.reviewMode=false;this.historyRecord=null;this.historySelectedId='';this.reviewIndex=0;this.reviewSourceId='';},
+      reviewMove(delta){this.reviewIndex=Math.max(0,Math.min(this.reviewCount-1,this.reviewIndex+delta));},
+      reviewJump(n){const i=Number(n);if(Number.isInteger(i)&&i>=0&&i<this.reviewCount)this.reviewIndex=i;},
+      reviewVoteCount(i){return this.reviewResult?.counts?.[i]||0;},
+      reviewVotePercent(i){return this.reviewResult?.total?Math.round(1000*this.reviewVoteCount(i)/this.reviewResult.total)/10:0;},
+      async loadHistory(){
+        if(this.historyLoading)return;
+        this.historyLoading=true;
+        try{
+          // 限讀最近 50 場，避免一次將無限歷史全下載到瀏覽器。
+          const snap=await refPath(`projects/${this.projectId}/sessions`).limitToLast(50).once('value');
+          this.historySessions=Object.entries(snap.val()||{}).map(([id,v])=>({
+            id,createdAt:v.createdAt||0,setName:v.setName||'未命名題組',
+            count:(v.order||[]).length,published:Object.keys(v.results||{}).length,
+            finishedAt:v.state?.finishedAt||0
+          })).sort((a,b)=>b.createdAt-a.createdAt);
+          if(!this.historySessions.length)this.showMessage('目前沒有歷史場次');
+        }catch(e){this.showMessage('❌ 讀取歷史場次失敗：'+e.message);}
+        finally{this.historyLoading=false;}
+      },
+      async openHistory(id){
+        if(!id)return;
+        this.historyLoading=true;
+        try{
+          const v=(await refPath(`projects/${this.projectId}/sessions/${id}`).once('value')).val();
+          if(!v)throw Error('找不到此場次');
+          this.historyRecord=v;this.historySelectedId=id;this.reviewSourceId=id;
+          this.reviewMode=true;this.reviewIndex=0;this.stopRevealAnimation();
+          this.showMessage('📚 已載入歷史場次，回顧不播放動畫、不會切換上課進度');
+        }catch(e){this.showMessage('❌ '+e.message);}finally{this.historyLoading=false;}
+      },
+      historyCount(i){
+        if(this.historyResult)return this.historyResult.counts?.[i]||0;
+        const q=this.historyQuestion,ans=this.historyRecord?.answers?.[this.historyQuestionId]||{};
+        const letter=letters[i];
+        return q?Object.values(ans).filter(a=>Array.isArray(a?.picks)&&a.picks.includes(letter)).length:0;
+      },
+      historyPercent(i){
+        const n=this.historyResult?.total ?? this.historyAnswerCount;
+        return n?Math.round(this.historyCount(i)*1000/n)/10:0;
+      },
+      openHistoryDisplay(){
+        if(!this.historySelectedId)return;
+        const url=new URL(this.getLink(this.projectId,'display'));
+        url.searchParams.set('history',this.historySelectedId);
+        window.open(url.href,'_blank','noopener,noreferrer');
+      },
+      reviewDisplayMove(delta){
+        if(!this.fixedSessionId)return;
+        this.historyIndex=Math.min(Math.max(this.historyIndex+delta,0),(this.session.order||[]).length-1);
+      },
+      countReveal(n){
+        const value=Number(n)||0;
+        return (!this.fixedSessionId&&this.revealAnimating&&this.animatingQuestionId===this.currentQuestionId)
+          ? Math.min(value,Math.round(value*this.revealProgress)):value;
+      },
+      resultCount(i){return this.countReveal(this.currentResult?.counts?.[i]||0);},
+      stopRevealAnimation(){
+        this.revealSerial++;
+        if(this.revealRaf!=null&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(this.revealRaf);
+        this.revealRaf=null;this.revealProgress=1;this.revealAnimating=false;
+        this.animatingQuestionId='';this.rankAnimationPhase='after';this.rankOldRows=[];this.rankNewRows=[];this.rankShifts={};
+      },
+      startRevealAnimation(qid,result,boardBefore){
+        if(this.currentView==='student'||this.fixedSessionId||this.reviewMode)return;
+        this.stopRevealAnimation();
+        this.animatingQuestionId=qid;
+        this.revealAnimating=true;this.revealProgress=0;
+        this.rankAnimationPhase='before';
+        const prior=sortClassRanking(result.rankingBefore||boardBefore||{});
+        this.rankOldRows=prior;
+        this.rankNewRows=sortClassRanking(result.rankingAfter||{});
+        const prev=Object.fromEntries(prior.map(r=>[r.id,r.rank]));
+        this.rankShifts=Object.fromEntries(this.rankNewRows.map(r=>[r.id,prev[r.id]===undefined?null:prev[r.id]-r.rank]));
+        const duration=1800;
+        const serial=this.revealSerial;
+        const start=typeof performance!=='undefined'?performance.now():Date.now();
+        const prefersReduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if(prefersReduced){this.revealProgress=1;this.rankAnimationPhase='after';this.revealAnimating=false;return;}
+        const frame=(tm)=>{
+          if(serial!==this.revealSerial||this.currentQuestionId!==qid||this.reviewMode||this.fixedSessionId)return;
+          const t=Math.max(0,Math.min(1,((tm||Date.now())-start)/duration));
+          this.revealProgress=1-Math.pow(1-t,3);
+          if(t>=0.28)this.rankAnimationPhase='after';
+          if(t<1){this.revealRaf=requestAnimationFrame(frame);}
+          else {this.revealProgress=1;this.revealRaf=null;
+            // 名次上下移動的 CSS Transition 最長 1.25s，保持顯示「上升／下降」標示。
+            this.revealAnimating=false;
+          }
+        };
+        if(typeof requestAnimationFrame==='function')this.revealRaf=requestAnimationFrame(frame);
+        else {this.revealProgress=1;this.rankAnimationPhase='after';this.revealAnimating=false;}
+      },
+      prepareRankAnimation(board){
+        if(!this.revealAnimating)return;
+        const old=sortClassRanking(this.currentResult?.rankingBefore||this.session.results?.[this.animatingQuestionId]?.rankingBefore||{});
+        const next=sortClassRanking(board||{});
+        const prev=Object.fromEntries(old.map(r=>[r.id,r.rank]));
+        this.rankNewRows=next;
+        this.rankOldRows=old;
+        this.rankShifts=Object.fromEntries(next.map(r=>[r.id,(prev[r.id]===undefined?null:prev[r.id]-r.rank)]));
+      },
+      movement(id){return this.rankShifts[id]??null;},
+      resultPercent(i){const r=this.currentResult;return r?.total?Math.round(1000*(r.counts?.[i]||0)/r.total)/10:0;},
+      async joinClass(){const nick=this.nickInput.trim();if(!nick)return this.showMessage('請先輸入暱稱');if(!this.studentId)this.studentId=uid();try{localStorage.setItem(`cq_id_${this.projectId}`,this.studentId);localStorage.setItem(`cq_nick_${this.projectId}`,nick);}catch(e){this.showMessage('⚠️ 無法保存至瀏覽器，重新整理後可能失去身分');}this.studentNickname=nick;await this.registerMember();this.showMessage('✅ 歡迎加入 '+nick);},
+      changeNickname(){this.nickInput=this.studentNickname;this.studentNickname='';try{localStorage.removeItem(`cq_nick_${this.projectId}`);}catch(e){}},
+      async registerMember(){if(!this.activeSessionId||!this.studentId||!this.studentNickname)return;const r=refPath(`projects/${this.projectId}/sessions/${this.activeSessionId}/members/${this.studentId}`);try{await r.transaction(m=>m?{...m,nickname:this.studentNickname}:{nickname:this.studentNickname,joinedAt:now()},undefined,false);}catch(e){this.errorMessage='無法加入此場次：'+e.message;this.showMessage('❌ 加入失敗');}},
+      async pickOption(l){if(!this.canStudentAnswer)return;const q=this.currentQuestion;if(q.type==='multi'){this.selection=this.selection.includes(l)?this.selection.filter(x=>x!==l):[...this.selection,l].sort();return;}this.selection=[l];if(this.answerMode==='quick')await this.submitAnswer();},
+      async submitAnswer(){if(!this.canStudentAnswer||!this.selection.length||this.sending)return;this.sending=true;const qid=this.currentQuestionId,sid=this.activeSessionId,picks=[...this.selection];try{
+          const base=`projects/${this.projectId}/sessions/${sid}`;const state=(await refPath(`${base}/state`).once('value')).val();if(!state||state.finishedAt||state.questionId!==qid||state.phase!=='asking'||(state.deadlineAt&&now()+this.serverOffset>=state.deadlineAt))throw Error('本題已停止作答');
+          if(!this.studentId)throw Error('找不到學員身分，請重新加入');
+          const path=`${base}/answers/${qid}/${this.studentId}`;const allowOverwrite=this.answerMode==='quick'&&this.currentQuestion.type==='single';
+          const tx=await refPath(path).transaction(old=>{if(old&&!allowOverwrite)return;return {picks,submittedAt:now()+this.serverOffset};},undefined,false);
+          if(!tx.committed){this.showMessage('⚠️ 此題已成功送出過，不能重複送出');return;}
+          this.myAnswer=tx.snapshot.val();this.showMessage('✅ 答案已送出');
+        }catch(e){this.showMessage('❌ 答案尚未送出：'+e.message);}finally{this.sending=false;}
+      },
+      async exportSession(){if(!this.activeSessionId)return;try{const data=(await refPath(`projects/${this.projectId}/sessions/${this.activeSessionId}`).once('value')).val();if(!data)throw Error('找不到場次資料');const file=new Blob([JSON.stringify({projectId:this.projectId,projectName:this.projectMeta.name,sessionId:this.activeSessionId,exportedAt:new Date().toISOString(),data},null,2)],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(file);const a=document.createElement('a');a.href=url;a.download=`課堂成績_${this.projectId.slice(-8)}_${this.activeSessionId.slice(-8)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);this.showMessage('✅ 已匯出場次 JSON');}catch(e){this.showMessage('❌ 匯出失敗：'+e.message);}}
+    }
+  }).mount('#app');
+})();
+
+</script>
+</body>
+</html>
