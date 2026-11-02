@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v1.4｜即時點選・全螢幕投影控制</title>
+<title>課堂互動即時答題系統 v1.6｜封存總覽・永久刪除・備份還原</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -264,6 +264,14 @@
 .student-minimal .student-wait{text-align:center;color:#e5edfc;font-weight:900;font-size:clamp(1.5rem,5vw,2.4rem)}
 @media(max-width:700px){.proj-fullscreen .showcase-head{flex-wrap:wrap}.proj-fullscreen .showcase-title h1{white-space:normal}.proj-fullscreen .projection-command{flex-wrap:wrap}.proj-fullscreen .projection-command .primary-next{width:100%}.proj-fullscreen .projection-layout{grid-template-columns:1fr}.proj-fullscreen .qr-side{display:none}.proj-fullscreen .stage-question h2{font-size:clamp(1.7rem,5.5vw,3rem)}.proj-fullscreen .stage-question .quiz-option{min-height:120px;font-size:clamp(1rem,3.4vw,2rem)}.proj-fullscreen .ranking-arena{height:calc(100dvh - 240px)}.proj-fullscreen .arena-rank-row{grid-template-columns:48px minmax(0,1fr) auto;gap:6px;font-size:1rem}.proj-fullscreen .arena-rank-row .score{font-size:.83rem}.proj-fullscreen .review-command{flex-wrap:wrap}.proj-fullscreen .review-command .rounded-action{flex:1;min-width:0}}
 @media(prefers-reduced-motion:reduce){.proj-fullscreen .stage-question .quiz-option,.proj-fullscreen .ranking-arena,.proj-fullscreen .arena-rank-row{animation:none!important;transition:none!important}}
+
+/* v1.6 永久刪除與封存入口；不改動原管理頁版型 */
+.permanent-action{background:#fff7f7!important;color:#991b1b!important;border:1px solid #fca5a5!important;font-weight:800!important;box-shadow:none!important}
+.permanent-action:hover{background:#fee2e2!important}
+.archive-folder{background:#f8fafc;border:1px solid #b6c7da;border-radius:10px;padding:12px;margin-top:12px}
+.archive-folder summary{font-weight:800;color:#1e40af;cursor:pointer;line-height:1.55}
+.archive-folder[open] summary{padding-bottom:8px;border-bottom:1px solid #dbe4ef;margin-bottom:9px}
+.archive-folder .itemline{background:white;margin:7px 0;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -287,7 +295,7 @@
             </div>
 
             <div style="margin-bottom: 20px; text-align:right;">
-                <button class="btn btn-outline" @click="toggleArchives" type="button">{{ showArchives ? '收起已刪專案' : '↶ 還原已刪專案' }}</button>
+                <button class="btn btn-outline" @click="toggleArchives" type="button">{{ showArchives ? '收起已刪專案' : '↶ 還原已刪專案' }}</button> <button class="btn btn-outline" @click="showRecoveryPicker" type="button">📂 JSON 備份還原</button>
             </div>
             <div v-if="showArchives" class="card" style="margin-bottom:24px;">
                 <h3 style="margin-top:0;">已刪除課程專案（可復原）</h3>
@@ -295,6 +303,7 @@
                 <div v-for="entry in archiveList" :key="entry.archiveId" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 0; border-bottom:1px solid #e2e8f0;">
                     <span>{{ entry.name }} <small style="color:#64748b;">({{ new Date(entry.deletedAt).toLocaleString() }})</small></span>
                     <button class="btn btn-outline" @click="restoreDeletedPoll(entry.archiveId)">↶ 還原課程與成績</button>
+                    <button class="btn permanent-action" @click="preparePermanentDelete('archivedProject',entry.archiveId)">⚠ 永久刪除此封存專案</button>
                 </div>
             </div>
             <div class="admin-room-grid">
@@ -310,7 +319,8 @@
                             <button class="btn-block admin-btn-outline-green" @click="duplicatePoll(poll)" style="margin: 0;">📄 複製課程</button>
                         </div>
 
-                        <button class="btn-block admin-btn-danger" @click="deletePoll(poll.id)" style="margin-top: 8px;">🗑️ 刪除課程</button>
+                        <button class="btn-block admin-btn-danger" @click="deletePoll(poll.id)" style="margin-top: 8px;">📦 封存課程</button>
+                        <button class="btn-block permanent-action" @click="preparePermanentDelete('project',poll.id)">⚠ 永久刪除課程（先備份）</button>
                     </div>
                 </div>
                 
@@ -340,10 +350,25 @@
                 <div class="itemline-title" @click="selectedSetId=s.id" style="cursor:pointer">📖 {{ s.name }}</div>
                 <div class="small">{{ questionCount(s.id) }} 題</div>
                 <div class="flexline" style="margin-top:8px">
-                  <button class="rounded-action" @click="selectedSetId=s.id">選擇</button><button class="rounded-action" @click="renameSet(s)">更名</button><button class="rounded-action" @click="cloneSet(s)">複製</button><button class="rounded-action danger" @click="archiveSet(s)">封存</button>
+                  <button class="rounded-action" @click="selectedSetId=s.id">選擇</button><button class="rounded-action" @click="renameSet(s)">更名</button><button class="rounded-action" @click="cloneSet(s)">複製</button><button class="rounded-action danger" @click="archiveSet(s)">封存</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('set',s.id)">永久刪除</button>
                 </div>
               </div>
-              <details style="margin-top:12px" v-if="archivedSets.length"><summary>↶ 已封存題組（{{archivedSets.length}}）</summary><div v-for="s in archivedSets" :key="s.id" class="itemline">{{s.name}} <button class="rounded-action" @click="restoreSet(s)">還原</button></div></details>
+              <details class="archive-folder" open><summary>📦 已封存題組（{{archivedSets.length}}）— 點此展開／收合</summary>
+                <p class="small" v-if="!archivedSets.length">目前沒有封存題組。</p>
+                <div v-for="s in archivedSets" :key="s.id" class="itemline"><b>{{s.name}}</b><div class="flexline"><button class="rounded-action" @click="restoreSet(s)">↶ 還原</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('set',s.id)">永久刪除（含題目與場次）</button></div></div>
+              </details>
+              <div class="hline"></div>
+              <details class="archive-folder" open style="margin:15px 0"><summary>🗂 封存資料總覽與清理（共 {{ archivedSets.length + archivedQuestionsAll.length }} 項）</summary>
+                <p class="small">包含您之前封存的題目與題組，即使題組已封存，也能在這裡找到。封存仍占用 Firebase 空間；永久刪除前會下載完整備份並建立本機還原點。</p>
+                <h4 style="margin:10px 0 6px">已封存題組（{{archivedSets.length}}）</h4>
+                <div v-for="s in archivedSets" :key="'as-'+s.id" class="itemline"><b>📚 {{s.name}}</b><div class="flexline"><button class="rounded-action" @click="restoreSet(s)">還原</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('set',s.id)">永久刪除</button></div></div>
+                <p v-if="!archivedSets.length" class="small">沒有已封存題組。</p>
+                <h4 style="margin:12px 0 6px">所有已封存題目（{{archivedQuestionsAll.length}}）</h4>
+                <div v-for="q in archivedQuestionsAll" :key="'aq-'+q.id" class="itemline"><div class="small">所屬題組：{{q.setName}}</div><b>{{q.text}}</b><div class="flexline"><button class="rounded-action" @click="restoreQuestion(q)">還原</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('question',q.id)">永久刪除</button></div></div>
+                <p v-if="!archivedQuestionsAll.length" class="small">沒有已封存題目。</p>
+              </details>
+              <button class="rounded-action" type="button" @click="showRecoveryPicker">📂 從已下載的 JSON 備份還原成獨立專案</button>
+              <input ref="recoveryFileInput" type="file" accept=".json,application/json" style="display:none" @change="restoreDownloadedCheckpoint">
               <div class="hline"></div>
               <h3>📱 加入課堂</h3>
               <div class="qr-render" ref="teacherQr"></div><p class="small" style="overflow-wrap:anywhere">{{getLink(projectId,'student')}}</p>
@@ -357,9 +382,12 @@
                   <div v-if="selectedQuestions.length===0" class="empty">這個題組還沒有題目。</div>
                   <div v-for="(q,i) in selectedQuestions" :key="q.id" class="itemline">
                     <div class="itemline-title">第 {{i+1}} 題　{{q.text}}</div><div class="small">{{typeLabel(q.type)}}・{{q.duration?`${q.duration} 秒`:'不限時間'}}・{{q.type==='poll'?'無標準答案':'答案：'+q.correct.join('、')}}</div>
-                    <div class="flexline" style="margin-top:8px"><button class="rounded-action" @click="editQuestion(q)">編輯</button><button class="rounded-action" :disabled="i===0" @click="moveQuestion(q,-1)">↑</button><button class="rounded-action" :disabled="i===selectedQuestions.length-1" @click="moveQuestion(q,1)">↓</button><button class="rounded-action" @click="cloneQuestion(q)">複製</button><button class="rounded-action danger" @click="archiveQuestion(q)">封存</button></div>
+                    <div class="flexline" style="margin-top:8px"><button class="rounded-action" @click="editQuestion(q)">編輯</button><button class="rounded-action" :disabled="i===0" @click="moveQuestion(q,-1)">↑</button><button class="rounded-action" :disabled="i===selectedQuestions.length-1" @click="moveQuestion(q,1)">↓</button><button class="rounded-action" @click="cloneQuestion(q)">複製</button><button class="rounded-action danger" @click="archiveQuestion(q)">封存</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('question',q.id)">永久刪除</button></div>
                   </div>
-                  <details v-if="archivedQuestions.length" style="margin-top:12px"><summary>↶ 已封存題目（{{archivedQuestions.length}}）</summary><div v-for="q in archivedQuestions" :key="q.id" class="itemline"><span>{{q.text}}</span> <button class="rounded-action" @click="restoreQuestion(q)">還原</button></div></details>
+                  <details class="archive-folder" open><summary>📦 本題組已封存題目（{{archivedQuestions.length}}）— 點此展開／收合</summary>
+                  <p class="small" v-if="!archivedQuestions.length">這個題組目前沒有已封存題目。</p>
+                  <div v-for="q in archivedQuestions" :key="q.id" class="itemline"><span>{{q.text}}</span><div class="flexline"><button class="rounded-action" @click="restoreQuestion(q)">↶ 還原</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('question',q.id)">永久刪除</button></div></div>
+                </details>
                 </template>
               </section>
               <section class="panel">
@@ -570,6 +598,16 @@
           </div>
         </div>
 
+        <div class="modal-scrim" v-if="purgeModal.show" role="dialog" aria-modal="true" aria-label="永久刪除前確認"><div class="modal-panel" style="max-width:600px">
+          <h2 style="color:#b91c1c">⚠ 永久刪除：{{purgeModal.label}}</h2>
+          <p><b>此操作會從 Firebase 真正刪除資料，包含相關題目與歷史作答（依刪除範圍）。</b>封存或一般還原無法復原永久刪除的資料。</p>
+          <p class="small">已建立瀏覽器本機 checkpoint，並嘗試下載完整 JSON 備份。請先確認手機／電腦的下載資料夾確實有檔案，並妥善保留；可透過「從 JSON 備份還原成獨立專案」取回完整原始資料。這次刪除不會再將備份寫回 Firebase。</p>
+          <div class="note">備份檔：{{purgeModal.filename}}<br>備份紀錄：{{purgeModal.backupId}}<br>{{purgeModal.impact}}</div>
+          <div class="flexline" style="margin:12px 0"><button class="rounded-action" @click="downloadPendingCheckpoint">⬇ 再次下載備份</button><button class="rounded-action" @click="purgeModal.show=false">取消</button></div>
+          <div class="field"><label>確定備份已儲存後，請輸入「永久刪除」以繼續</label><input v-model="purgeModal.typed" autocomplete="off" placeholder="永久刪除"></div>
+          <div class="flexline" style="justify-content:flex-end"><button class="rounded-action danger" :disabled="working||purgeModal.typed!=='永久刪除'" @click="commitPermanentDelete">{{working?'正在檢查資料…':'確認永久刪除並釋放雲端空間'}}</button></div>
+        </div></div>
+        <input id="global-recovery-input" type="file" accept=".json,application/json" style="display:none" @change="restoreDownloadedCheckpoint">
         <div class="modal-scrim" v-if="confirmModal.show"><div class="modal-panel" style="max-width:440px"><h2>⚠️ 確認操作</h2><p>{{confirmModal.message}}</p><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="confirmModal.show=false">取消</button><button class="rounded-action danger" @click="executeConfirm">確定</button></div></div></div>
         <div class="modal-scrim" v-if="renameModal.show"><div class="modal-panel" style="max-width:480px"><h2>✏️ 重新命名課程專案</h2><div class="field"><input v-model.trim="renameModal.newName" @keydown.enter="executeRename" placeholder="請輸入新名稱"></div><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="renameModal.show=false">取消</button><button class="rounded-action primary" @click="executeRename">儲存</button></div></div></div>
         <div class="modal-scrim" v-if="questionModal.show"><div class="modal-panel"><h2>{{questionModal.id?'✏️ 編輯題目':'＋ 建立新題目'}}</h2>
@@ -587,7 +625,7 @@
 </div>
 <script>
 /*
- * 課堂互動答題系統 v1.5 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
+ * 課堂互動答題系統 v1.6 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
  * 此前端保留原登入密碼流程以便移轉；前端密碼並不是可靠的管理員驗證。
  * 若要正式上線，必須改採 Firebase Authentication + 限制性的 Database Rules。
  * 本系統所有資料在 classroomQuizV1 路徑，絕不改寫舊 polls/pollsList。
@@ -654,7 +692,7 @@
   createApp({
     data() { return {
       isLoading:false, currentView:'login', desiredView:'lobby', loginPassword:'',
-      newPollName:'', pollsList:[], showArchives:false, archiveList:[],
+      newPollName:'', pollsList:[], showArchives:false, archiveList:[], purgeModal:{show:false,kind:'',id:'',label:'',typed:'',filename:'',backupId:'',impact:''},
       renameModal:{show:false,id:'',newName:''},confirmModal:{show:false,message:'',action:null},
       projectId:'',projectMeta:{},projectRuntime:{},sets:{},questions:{},selectedSetId:'',
       newSetName:'',setAnswerMode:'quick',jumpQuestionId:'',
@@ -683,6 +721,7 @@
       localFileWarning(){return ['file:','content:'].includes(location.protocol);},
       selectedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&!q.archived).sort((a,b)=>(a.order||0)-(b.order||0));},
       archivedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&q.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));},
+      archivedQuestionsAll() {return Object.entries(this.questions).map(([id,x])=>({id,...x,setName:this.sets[x.setId]?.name||'題組已不存在'})).filter(q=>q.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));},
       currentQuestionId(){return this.fixedSessionId ? (this.session.order?.[this.historyIndex]||'') : (this.session.state?.questionId||'');},
       reviewData(){return this.historyRecord || this.session;},
       reviewQuestionId(){return this.reviewData?.order?.[this.reviewIndex]||'';},
@@ -842,8 +881,172 @@
       });},
       async toggleArchives(){this.showArchives=!this.showArchives;if(!this.showArchives)return;try{const v=(await refPath('archiveList').once('value')).val()||{};this.archiveList=Object.entries(v).map(([archiveId,x])=>({archiveId,...x,deletedAt:x.archivedAt})).sort((a,b)=>b.archivedAt-a.archivedAt);}catch(e){this.showMessage('❌ 讀取封存失敗：'+e.message);}},
       restoreDeletedPoll(aid){this.askConfirm('還原完整專案與全部歷史成績？若原 ID 已存在，將停止避免覆寫。',async()=>{
-        try{const a=(await refPath(`archives/${aid}`).once('value')).val();if(!a?.projectId||!a.projectData||!a.projectMeta)throw Error('備份不完整');const id=a.projectId;if((await refPath(`projects/${id}`).once('value')).exists()||(await refPath(`projectsList/${id}`).once('value')).exists())throw Error('此 ID 已存在，不會覆寫');const changes={};changes[`${ROOT}/projects/${id}`]=a.projectData;changes[`${ROOT}/projectsList/${id}`]=a.projectMeta;changes[`${ROOT}/archiveList/${aid}`]=null;changes[`${ROOT}/archives/${aid}/restoredAt`]=now();await db.ref().update(changes);this.archiveList=this.archiveList.filter(x=>x.archiveId!==aid);this.showMessage('✅ 已還原專案、題組與成績');}catch(e){this.showMessage('❌ 還原失敗：'+e.message);}
+        try{const a=(await refPath(`archives/${aid}`).once('value')).val();if(!a?.projectId||!a.projectData||!a.projectMeta)throw Error('備份不完整');const id=a.projectId;if((await refPath(`projects/${id}`).once('value')).exists()||(await refPath(`projectsList/${id}`).once('value')).exists())throw Error('此 ID 已存在，不會覆寫');const changes={};changes[`${ROOT}/projects/${id}`]=a.projectData;changes[`${ROOT}/projectsList/${id}`]=a.projectMeta;changes[`${ROOT}/archiveList/${aid}`]=null;changes[`${ROOT}/archives/${aid}`]=null;await db.ref().update(changes);this.archiveList=this.archiveList.filter(x=>x.archiveId!==aid);this.showMessage('✅ 已還原專案、題組與成績');}catch(e){this.showMessage('❌ 還原失敗：'+e.message);}
       });},
+      // ===== v1.6 可追溯本機 checkpoint 與真正 Firebase 永久刪除 =====
+      async saveLocalCheckpoint(record){
+        // 先寫入 IndexedDB 的 before_remove checkpoint；失敗即禁止刪除。
+        if(typeof indexedDB==='undefined')throw Error('瀏覽器不支援 IndexedDB，本機備份無法完成；未刪除資料。');
+        await new Promise((resolve,reject)=>{
+          const req=indexedDB.open('ClassroomQuizRecoverableCheckpoints',1);
+          req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('snapshots'))req.result.createObjectStore('snapshots',{keyPath:'backupId'});};
+          req.onerror=()=>reject(req.error||Error('本機備份資料庫開啟失敗'));
+          req.onsuccess=()=>{const dbi=req.result;let tx;try{tx=dbi.transaction('snapshots','readwrite');tx.objectStore('snapshots').put(record);}catch(e){dbi.close();reject(e);return;}tx.oncomplete=()=>{dbi.close();resolve();};tx.onerror=()=>{dbi.close();reject(tx.error||Error('本機備份寫入失敗'));};tx.onabort=()=>{dbi.close();reject(tx.error||Error('本機備份交易中止'));};};
+        });
+      },
+      downloadCheckpoint(record){
+        const name=`課堂答題_before_remove_${record.kind}_${record.backupId}.json`;
+        const bytes=JSON.stringify(record,null,2);
+        const blob=new Blob([bytes],{type:'application/json;charset=utf-8'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),30000);
+        return name;
+      },
+      downloadPendingCheckpoint(){if(this._pendingPurge?.backup)this.downloadCheckpoint(this._pendingPurge.backup);},
+      async preparePermanentDelete(kind,id){
+        if(!this.hasAdminAccess)return this.showMessage('請先登入管理端');
+        if(this.working)return;
+        this.working=true;
+        try{
+          let projectId=this.projectId,source=null,meta=null,archiveId='';
+          if(kind==='project')projectId=id;
+          if(kind==='archivedProject'){
+            archiveId=id;const archived=(await refPath(`archives/${id}`).once('value')).val();
+            if(!archived?.projectId||!archived?.projectData||!archived?.projectMeta)throw Error('找不到完整封存專案');
+            projectId=archived.projectId;source=archived.projectData;meta=archived.projectMeta;
+          }else{
+            source=(await refPath(`projects/${projectId}`).once('value')).val();
+            meta=(await refPath(`projectsList/${projectId}`).once('value')).val();
+            if(!source||!meta)throw Error('找不到完整專案資料，沒有刪除');
+          }
+          let label=meta.name||'未命名專案',targetQuestionIds=[];
+          if(kind==='question'){
+            const q=source.questions?.[id];if(!q)throw Error('此題目不存在或已被刪除');
+            label='題目：'+(q.text||id);targetQuestionIds=[id];
+          }
+          if(kind==='set'){
+            const set=source.sets?.[id];if(!set)throw Error('此題組不存在或已被刪除');
+            label='題組：'+(set.name||id);
+            targetQuestionIds=Object.keys(source.questions||{}).filter(qid=>source.questions[qid]?.setId===id);
+          }
+          const affected=Object.values(source.sessions||{}).filter(sess=>kind==='set'?sess.setId===id:(kind==='question'?!!sess.questions?.[id]:false));
+          if((kind==='set'||kind==='question')&&affected.some(sess=>!sess.state?.finishedAt)){
+            throw Error('這些題目仍在尚未結束的課堂場次中。請先按「結束本場」，避免學員正在作答時資料被刪除。');
+          }
+          if(kind==='project'&&Object.values(source.sessions||{}).some(sess=>!sess.state?.finishedAt)){
+            throw Error('此專案仍有未結束的課堂場次，請先結束場次再永久刪除整個專案。');
+          }
+          const impact=kind==='question'?`將刪除題庫中的 1 題及 ${affected.length} 個歷史場次內對應的答題與統計；其他題目重新計算名次。`:
+            kind==='set'?`將刪除整個題組與 ${targetQuestionIds.length} 題，以及該題組 ${affected.length} 個歷史場次（含成績）。`:
+            '將刪除整個專案、題組、題目、上課場次、成績與相關雲端封存資料。';
+          const record={format:'classroom-quiz-before-remove-v1',backupId:'before_remove_'+new Date().toISOString().replace(/[:.]/g,'-')+'_'+uid().slice(0,8),savedAt:new Date().toISOString(),kind,projectId,archiveId,targetId:id,projectMeta:clone(meta),projectData:clone(source),impact};
+          await this.saveLocalCheckpoint(record);
+          this._pendingPurge={kind,id,projectId,archiveId,backup:record,sourceSignature:JSON.stringify({meta,source})};
+          const filename=this.downloadCheckpoint(record);
+          this.purgeModal={show:true,kind,id,label,typed:'',filename,backupId:record.backupId,impact};
+          this.showMessage('✅ 本機 checkpoint 已建立，請先確認 JSON 已下載，再決定是否刪除');
+        }catch(e){this._pendingPurge=null;this.showMessage('❌ 無法準備永久刪除：'+e.message);this.errorMessage='永久刪除未執行：'+e.message;}
+        finally{this.working=false;}
+      },
+      makePermanentDeleteChanges(projectId,source,kind,id){
+        const base=`${ROOT}/projects/${projectId}`;
+        const changes={};const isSet=kind==='set';
+        const targets=new Set(isSet?Object.keys(source.questions||{}).filter(qid=>source.questions[qid]?.setId===id):[id]);
+        if(isSet){changes[`${base}/sets/${id}`]=null;}
+        for(const qid of targets)changes[`${base}/questions/${qid}`]=null;
+        // 清除題目相關雲端版本快照，避免已刪內容仍占用免費空間。
+        for(const [bid,b] of Object.entries(source.backups||{})){
+          if(bid==='meta')continue;
+          const path=b?.path||'';
+          const direct=path===`projects/${projectId}/sets/${id}`&&isSet || [...targets].some(qid=>path===`projects/${projectId}/questions/${qid}`);
+          const reorder=path==='questions'&&Object.keys(b?.old||{}).some(qid=>targets.has(qid));
+          const coupled=b?.action==='before_restore_archived_question_and_set'&&(targets.has(b.questionId)||(isSet&&b.setId===id));
+          if(direct||reorder||coupled)changes[`${base}/backups/${bid}`]=null;
+        }
+        // 優先保護仍在測驗的場次，不能帶著作答寫入進行整批覆寫。
+        for(const [sid,original] of Object.entries(source.sessions||{})){
+          const affected=isSet?original?.setId===id:!!original?.questions?.[id];
+          if(!affected)continue;
+          if(!original.state?.finishedAt)throw Error('有尚未結束的相關場次，已取消刪除');
+          if(isSet){changes[`${base}/sessions/${sid}`]=null;}
+          else{
+            const sess=clone(original);
+            sess.order=(sess.order||[]).filter(qid=>qid!==id);
+            for(const path of ['questions','results','answers']){if(sess[path])delete sess[path][id];}
+            if(!sess.order.length){changes[`${base}/sessions/${sid}`]=null;}
+            else{
+              // 對剩餘已公布題目依原公布時間重建每題前後排名快照。
+              const done={};const sorted=Object.entries(sess.results||{}).sort((a,b)=>(a[1].publishedAt||0)-(b[1].publishedAt||0));
+              for(const [qid,res] of sorted){
+                res.rankingBefore=summarizeClassResults(sess.questions,done,sess.answers||{},sess.members||{});
+                done[qid]=res;
+                res.rankingAfter=summarizeClassResults(sess.questions,done,sess.answers||{},sess.members||{});
+              }
+              sess.leaderboard=summarizeClassResults(sess.questions,done,sess.answers||{},sess.members||{});
+              sess.state=sess.state||blankState();
+              const nextIdx=sess.order.indexOf(sess.state.questionId);
+              const correctedIndex=nextIdx>=0?nextIdx:Math.min(Math.max(0,original.state?.questionIndex||0),sess.order.length-1);
+              sess.state.questionIndex=correctedIndex;
+              sess.state.questionId=sess.order[correctedIndex];
+              if(sess.state.startedQuestions)delete sess.state.startedQuestions[id];
+              changes[`${base}/sessions/${sid}`]=sess;
+            }
+          }
+          if(source.runtime?.activeSessionId===sid && (isSet||(!isSet&&original.order?.length===1))){changes[`${base}/runtime/activeSessionId`]='';}
+        }
+        return changes;
+      },
+      async commitPermanentDelete(){
+        if(this.working||this.purgeModal.typed!=='永久刪除'||!this._pendingPurge)return;
+        this.working=true;
+        const task=this._pendingPurge;
+        try{
+          const {kind,id,projectId,archiveId,sourceSignature}=task;
+          let source,meta,changes={};
+          if(kind==='archivedProject'){
+            const ar=(await refPath(`archives/${archiveId}`).once('value')).val();
+            if(!ar)throw Error('封存資料已變更，請重新準備備份');
+            source=ar.projectData;meta=ar.projectMeta;
+            if(JSON.stringify({meta,source})!==sourceSignature)throw Error('封存資料自備份後有變更，請重新備份');
+            changes[`${ROOT}/archives/${archiveId}`]=null;changes[`${ROOT}/archiveList/${archiveId}`]=null;
+          }else{
+            source=(await refPath(`projects/${projectId}`).once('value')).val();meta=(await refPath(`projectsList/${projectId}`).once('value')).val();
+            if(!source||!meta||JSON.stringify({meta,source})!==sourceSignature)throw Error('資料自備份後已更新，可能有新作答或設定；請重新建立最新備份再刪除');
+            if(kind==='project'){
+              changes[`${ROOT}/projects/${projectId}`]=null;changes[`${ROOT}/projectsList/${projectId}`]=null;
+              // 清除同一專案先前殘留的封存副本及索引。
+              const ars=(await refPath('archives').once('value')).val()||{};
+              for(const [aid,a] of Object.entries(ars))if(a?.projectId===projectId){changes[`${ROOT}/archives/${aid}`]=null;changes[`${ROOT}/archiveList/${aid}`]=null;}
+            }else changes=this.makePermanentDeleteChanges(projectId,source,kind,id);
+          }
+          const size=new Blob([JSON.stringify(changes)]).size;
+          if(size>12*1024*1024)throw Error('本次更新超過安全的單次寫入容量，已停止且不刪除。請分批清理或使用伺服器管理工具。');
+          await db.ref().update(changes);
+          this.purgeModal.show=false;this._pendingPurge=null;
+          if(kind==='archivedProject'){this.archiveList=this.archiveList.filter(x=>x.archiveId!==archiveId);}
+          if(kind==='set'&&this.selectedSetId===id)this.selectedSetId='';
+          this.showMessage('✅ Firebase 已永久刪除；JSON 備份與本機 checkpoint 仍可用於還原');
+        }catch(e){this.errorMessage='永久刪除未完成：'+e.message;this.showMessage('❌ 永久刪除取消：'+e.message);}
+        finally{this.working=false;}
+      },
+      showRecoveryPicker(){const el=document.getElementById('global-recovery-input');if(el){el.value='';el.click();}},
+      async restoreDownloadedCheckpoint(event){
+        const f=event.target.files?.[0];if(!f)return;
+        try{
+          const record=JSON.parse(await f.text());
+          if(record.format!=='classroom-quiz-before-remove-v1'||!record.projectData?.meta||!record.projectMeta)throw Error('此檔案不是本系統有效的 before_remove 備份');
+          if(!this.hasAdminAccess)throw Error('請先登入管理員');
+          // 一律建立新專案，避免覆寫任何現有課程、場次、成績或新作答。
+          const newId=refPath('projects').push().key;
+          const meta={...clone(record.projectMeta),name:(record.projectMeta.name||'未命名')+'（從備份還原）',restoredFrom:record.backupId,restoredAt:now()};
+          const data=clone(record.projectData);data.meta=meta;
+          const changes={};changes[`${ROOT}/projects/${newId}`]=data;changes[`${ROOT}/projectsList/${newId}`]=meta;
+          if(new Blob([JSON.stringify(changes)]).size>12*1024*1024)throw Error('備份資料超過安全的單次還原大小，已停止且沒有覆寫任何專案');
+          await db.ref().update(changes);
+          this.showMessage('✅ 已還原為獨立的新專案；原有資料未覆寫');
+        }catch(e){this.errorMessage='備份還原未完成：'+e.message;this.showMessage('❌ 無法還原：'+e.message);}finally{event.target.value='';}
+      },
       async createSet(){const n=this.newSetName.trim();if(!n)return this.showMessage('請輸入題組名稱');try{const r=refPath(`projects/${this.projectId}/sets`).push();await r.set({name:n,order:now(),createdAt:now(),archived:false,answerMode:'quick'});this.selectedSetId=r.key;this.newSetName='';this.showMessage('✅ 題組已建立');}catch(e){this.showMessage('❌ '+e.message);}},
       async versionedUpdate(path,oldData,newData,action){const backupId=refPath(`projects/${this.projectId}/backups`).push().key;const changes={};changes[`${ROOT}/projects/${this.projectId}/backups/${backupId}`]={path,old:clone(oldData),action,savedAt:now()};changes[`${ROOT}/${path}`]=newData;await db.ref().update(changes);},
       async renameSet(s){const name=prompt('修改題組名稱',s.name);if(name===null)return;if(!name.trim())return this.showMessage('題組名稱不可空白');try{const p=`projects/${this.projectId}/sets/${s.id}`;await this.versionedUpdate(p,this.sets[s.id],{...this.sets[s.id],name:name.trim(),updatedAt:now()},'before_rename_set');this.showMessage('✅ 題組已更新');}catch(e){this.showMessage('❌ '+e.message);}},
@@ -863,7 +1066,27 @@
       },
       async cloneQuestion(q){try{const r=refPath(`projects/${this.projectId}/questions`).push();await r.set({...clone(this.questions[q.id]),text:q.text+'（複製）',order:now(),createdAt:now()});this.showMessage('✅ 已複製題目');}catch(e){this.showMessage('❌ '+e.message);}},
       archiveQuestion(q){this.askConfirm(`封存這道題目？舊場次及得分不受影響，題目可還原。`,async()=>{try{const p=`projects/${this.projectId}/questions/${q.id}`;await this.versionedUpdate(p,this.questions[q.id],{...this.questions[q.id],archived:true,updatedAt:now()},'before_archive_question');this.showMessage('✅ 題目已封存');}catch(e){this.showMessage('❌ '+e.message);}});},
-      async restoreQuestion(q){try{const p=`projects/${this.projectId}/questions/${q.id}`;await this.versionedUpdate(p,this.questions[q.id],{...this.questions[q.id],archived:false,updatedAt:now()},'before_restore_question');this.showMessage('✅ 題目已還原');}catch(e){this.showMessage('❌ '+e.message);}},
+      async restoreQuestion(q){
+        try{
+          const old=this.questions[q.id];if(!old)throw Error('題目不存在');
+          const group=this.sets[old.setId];
+          if(group?.archived){
+            // 封存題組內的題目還原時，同時還原所屬題組，避免題目仍被藏住。
+            const pid=`projects/${this.projectId}`;
+            const backupId=refPath(`${pid}/backups`).push().key;
+            const changes={};
+            changes[`${ROOT}/${pid}/backups/${backupId}`]={action:'before_restore_archived_question_and_set',savedAt:now(),oldQuestion:clone(old),oldSet:clone(group),questionId:q.id,setId:old.setId};
+            changes[`${ROOT}/${pid}/questions/${q.id}`]={...old,archived:false,updatedAt:now()};
+            changes[`${ROOT}/${pid}/sets/${old.setId}`]={...group,archived:false,updatedAt:now()};
+            await db.ref().update(changes);
+          }else{
+            const p=`projects/${this.projectId}/questions/${q.id}`;
+            await this.versionedUpdate(p,old,{...old,archived:false,updatedAt:now()},'before_restore_question');
+          }
+          this.selectedSetId=old.setId;
+          this.showMessage('✅ 題目已還原'+(group?.archived?'，所屬題組也已恢復':''));
+        }catch(e){this.showMessage('❌ '+e.message);}
+      },
       async moveQuestion(q,step){const list=this.selectedQuestions,i=list.findIndex(x=>x.id===q.id),other=list[i+step];if(!other)return;
         try{const q1=this.questions[q.id],q2=this.questions[other.id],old=clone({[q.id]:q1,[other.id]:q2});const base=`${ROOT}/projects/${this.projectId}`;const b=refPath(`projects/${this.projectId}/backups`).push().key;const a=q1.order||0,c=q2.order||0;const upd={};upd[`${base}/backups/${b}`]={path:`questions`,old,action:'before_reorder',savedAt:now()};upd[`${base}/questions/${q.id}/order`]=c;upd[`${base}/questions/${other.id}/order`]=a;await db.ref().update(upd);this.showMessage('✅ 已調整順序');}catch(e){this.showMessage('❌ '+e.message);}
       },
