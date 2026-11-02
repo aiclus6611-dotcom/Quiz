@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v1.6｜封存總覽・永久刪除・備份還原</title>
+<title>課堂互動即時答題系統 v1.6.1｜封存總覽・永久刪除・備份還原</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -410,8 +410,23 @@
                   <button class="rounded-action" @click="openCurrentReview" :disabled="!activeSessionId||historyLoading">📚 逐題回看全部結果</button>
                   <button class="rounded-action" @click="loadHistory" :disabled="historyLoading">🗃️ 選擇歷史場次</button>
                   <button class="rounded-action" @click="exportSession" :disabled="!activeSessionId">💾 匯出場次</button>
-                  <button v-if="activeSessionId&&!session.state.finishedAt&&isLastQuestion&&phase==='revealed'" class="rounded-action" @click="finishSession">完成本場並回看</button>
+                  <button v-if="activeSessionId&&!session.state.finishedAt" class="rounded-action danger" @click="finishSession">🏁 結束本場</button>
                 </div>
+                <details class="archive-folder" open style="margin-top:16px" aria-label="未結束場次管理">
+                  <summary>🏁 未結束場次管理{{unfinishedScanned?'（'+unfinishedSessions.length+' 場）':''}} — 找到阻擋永久刪除的舊場次</summary>
+                  <p class="small">如果目前場次已顯示「課後回顧」，但仍無法永久刪除，通常代表本專案<strong>其他較早的場次</strong>尚未結束。此處可搜尋全部場次，不限最近 50 場。結束場次不會清除題目、學員答題、成績或排行榜。</p>
+                  <button class="rounded-action" type="button" :disabled="unfinishedLoading||working" @click="loadUnfinishedSessions">{{unfinishedLoading?'搜尋中…':'🔎 搜尋所有未結束場次'}}</button>
+                  <p class="small" v-if="unfinishedScanned&&!unfinishedSessions.length" style="color:#166534">✅ 沒有發現尚未結束的場次；如果刪除仍失敗，請重新整理後再試。</p>
+                  <div v-for="u in unfinishedSessions" :key="u.id" class="itemline" style="margin-top:10px">
+                    <div class="flexline" style="justify-content:space-between"><b>📚 {{u.setName}}</b><span class="pill amber">尚未結束</span></div>
+                    <div class="small">{{new Date(u.createdAt).toLocaleString()}}・{{u.published}} / {{u.count}} 題已公布</div>
+                    <div class="small">場次識別：{{u.id}} <span v-if="u.id===activeSessionId">（目前場次）</span></div>
+                    <div class="flexline" style="margin-top:9px">
+                      <button class="rounded-action" type="button" @click="openHistory(u.id)" :disabled="unfinishedLoading||working">查看紀錄</button>
+                      <button class="rounded-action danger" type="button" @click="finishUnfinishedSession(u)" :disabled="unfinishedLoading||working">🏁 結束此場（保留答題資料）</button>
+                    </div>
+                  </div>
+                </details>
                 <div v-if="historySessions.length" class="field" style="margin-top:12px"><label>歷史場次（回顧不影響目前課程）</label>
                   <div v-for="h in historySessions" :key="h.id" class="itemline flexline" style="justify-content:space-between">
                     <div><b>{{h.setName}}</b><div class="small">{{new Date(h.createdAt).toLocaleString()}}・{{h.published}} / {{h.count}} 題已公布</div></div>
@@ -625,7 +640,7 @@
 </div>
 <script>
 /*
- * 課堂互動答題系統 v1.6 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
+ * 課堂互動答題系統 v1.6.1 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
  * 此前端保留原登入密碼流程以便移轉；前端密碼並不是可靠的管理員驗證。
  * 若要正式上線，必須改採 Firebase Authentication + 限制性的 Database Rules。
  * 本系統所有資料在 classroomQuizV1 路徑，絕不改寫舊 polls/pollsList。
@@ -707,6 +722,7 @@
       toastTimer:null,tickTimer:null,requestPublish:false,
       fixedSessionId:'', inlineReviewMode:false,historyIndex:0, historySessions:[], historySelectedId:'',
       historyRecord:null, historyLoading:false,
+      unfinishedSessions:[],unfinishedLoading:false,unfinishedScanned:false,
       reviewMode:false,reviewIndex:0,reviewSourceId:'',
       revealProgress:1,revealAnimating:false,rankAnimationPhase:'after',rankOldRows:[],rankNewRows:[],
       rankShifts:{},animatingQuestionId:'',revealRaf:null,revealSerial:0,
@@ -931,11 +947,14 @@
             targetQuestionIds=Object.keys(source.questions||{}).filter(qid=>source.questions[qid]?.setId===id);
           }
           const affected=Object.values(source.sessions||{}).filter(sess=>kind==='set'?sess.setId===id:(kind==='question'?!!sess.questions?.[id]:false));
+          const openSessions=this.collectUnfinishedSessions(source.sessions||{});
           if((kind==='set'||kind==='question')&&affected.some(sess=>!sess.state?.finishedAt)){
-            throw Error('這些題目仍在尚未結束的課堂場次中。請先按「結束本場」，避免學員正在作答時資料被刪除。');
+            this.unfinishedSessions=openSessions;this.unfinishedScanned=true;
+            throw Error('這些題目仍屬於未結束的課堂場次。請向下找到「未結束場次管理」，逐場確認並按「結束此場」（不刪答題資料）後再試。');
           }
-          if(kind==='project'&&Object.values(source.sessions||{}).some(sess=>!sess.state?.finishedAt)){
-            throw Error('此專案仍有未結束的課堂場次，請先結束場次再永久刪除整個專案。');
+          if(kind==='project'&&openSessions.length){
+            this.unfinishedSessions=openSessions;this.unfinishedScanned=true;
+            throw Error('此專案有 '+openSessions.length+' 場尚未結束；請在講師控制台的「未結束場次管理」處理，不要按「開始」建立新場次。');
           }
           const impact=kind==='question'?`將刪除題庫中的 1 題及 ${affected.length} 個歷史場次內對應的答題與統計；其他題目重新計算名次。`:
             kind==='set'?`將刪除整個題組與 ${targetQuestionIds.length} 題，以及該題組 ${affected.length} 個歷史場次（含成績）。`:
@@ -1168,11 +1187,9 @@
       previousQuestion(){this.showMessage('請使用「逐題回看」瀏覽先前結果，不會改變目前出題進度。');},
       jumpQuestion(){this.showMessage('進行測驗時依順序出題；回顧時可自由跳至任一題。');},
       finishSession(){
-        if(this.fixedSessionId||!this.activeSessionId)return;
-        this.askConfirm('確定將本場標示為已結束？全部答題與逐題結果會原封保留，講師可隨時逐題回看。',async()=>{
-          const ok=await this.changeState(st=>st.finishedAt?undefined:{...st,phase:this.session.results?.[st.questionId]?'revealed':'closed',finishedAt:now()+this.serverOffset,deadlineAt:0});
-          if(ok){this.showMessage('📚 已結束本場，請按「逐題回看」');await this.openCurrentReview();}
-        });
+        if(this.fixedSessionId||!this.activeSessionId||this.session.state?.finishedAt)return;
+        // 目前場次與歷史舊場次共用同一套「先備份，再結束」的安全流程。
+        this.finishUnfinishedSession({id:this.activeSessionId,setName:this.session.setName||'目前題組'});
       },
       async openCurrentReview(){
         if(!this.activeSessionId)return this.showMessage('目前沒有可回顧的場次');
@@ -1196,6 +1213,53 @@
       reviewJump(n){const i=Number(n);if(Number.isInteger(i)&&i>=0&&i<this.reviewCount)this.reviewIndex=i;},
       reviewVoteCount(i){return this.reviewResult?.counts?.[i]||0;},
       reviewVotePercent(i){return this.reviewResult?.total?Math.round(1000*this.reviewVoteCount(i)/this.reviewResult.total)/10:0;},
+      collectUnfinishedSessions(sessions){
+        return Object.entries(sessions||{}).filter(([,v])=>v && !v.state?.finishedAt).map(([id,v])=>({
+          id,createdAt:Number(v.createdAt)||0,setName:v.setName||'未命名題組',
+          count:(v.order||[]).length,published:Object.keys(v.results||{}).length
+        })).sort((a,b)=>b.createdAt-a.createdAt);
+      },
+      async loadUnfinishedSessions(){
+        if(!this.hasAdminAccess||this.unfinishedLoading||this.working)return;
+        this.unfinishedLoading=true;
+        try{
+          // 既有舊場次沒有獨立的 finishedAt 索引；須讀取場次資料才能一次找全。
+          // 只在管理員主動搜尋時執行，避免學員或一般觀看頁下載歷史資料。
+          const snap=await refPath(`projects/${this.projectId}/sessions`).once('value');
+          this.unfinishedSessions=this.collectUnfinishedSessions(snap.val()||{});
+          this.unfinishedScanned=true;
+        }catch(e){this.showMessage('❌ 無法搜尋舊場次：'+e.message);}
+        finally{this.unfinishedLoading=false;}
+      },
+      finishUnfinishedSession(entry){
+        if(!entry?.id||!this.hasAdminAccess||this.working)return;
+        const sid=entry.id, label=entry.setName||'未命名題組';
+        this.askConfirm(`確定結束題組「${label}」的舊場次（${sid.slice(-8)}）？結束後不再接受該場次的新答案。原有題目、答題、成績及排名均保留；本次會先建立雲端 checkpoint，可供恢復原狀。`,async()=>{
+          if(this.working)return;
+          this.working=true;
+          try{
+            const path=`projects/${this.projectId}/sessions/${sid}`;
+            const existing=(await refPath(path).once('value')).val();
+            if(!existing?.state)throw Error('場次資料不存在或狀態遺失，已停止');
+            if(existing.state.finishedAt){this.showMessage('✅ 這一場已經結束');return;}
+            const oldState=clone(existing.state);
+            const expected=JSON.stringify(oldState);
+            const b=refPath(`projects/${this.projectId}/backups`).push();
+            // 確保備份成功才允許變更狀態。永不自動清除既有作答。
+            await b.set({path:path+'/state',old:oldState,action:'before_finish_old_session',sessionId:sid,setName:label,savedAt:now()});
+            const finishedTime=now()+this.serverOffset;
+            const hasPublished=!!existing.results?.[oldState.questionId];
+            const tx=await refPath(path+'/state').transaction(state=>{
+              if(!state||state.finishedAt||JSON.stringify(state)!==expected)return;
+              return {...state,phase:hasPublished?'revealed':'closed',finishedAt:finishedTime,deadlineAt:0};
+            },undefined,false);
+            if(!tx.committed)throw Error('場次狀態已被其他視窗改動，為保護資料請重新搜尋再操作');
+            this.showMessage('✅ 場次已結束，學員成績完整保留');
+            if(sid===this.activeSessionId)await this.openCurrentReview();
+          }catch(e){this.showMessage('❌ 結束場次失敗：'+e.message);}
+          finally{this.working=false;await this.loadUnfinishedSessions();}
+        });
+      },
       async loadHistory(){
         if(this.historyLoading)return;
         this.historyLoading=true;
