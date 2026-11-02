@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v1.6.1｜封存總覽・永久刪除・備份還原</title>
+<title>課堂互動即時答題系統 v1.7｜全部場次・永久刪除・雲端空間清理</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -319,8 +319,8 @@
                             <button class="btn-block admin-btn-outline-green" @click="duplicatePoll(poll)" style="margin: 0;">📄 複製課程</button>
                         </div>
 
-                        <button class="btn-block admin-btn-danger" @click="deletePoll(poll.id)" style="margin-top: 8px;">📦 封存課程</button>
-                        <button class="btn-block permanent-action" @click="preparePermanentDelete('project',poll.id)">⚠ 永久刪除課程（先備份）</button>
+                        <button class="btn-block admin-btn-danger" @click="deletePoll(poll.id)" style="margin-top: 8px;">📦 封存課程（仍占空間）</button>
+                        <button class="btn-block permanent-action" @click="preparePermanentDelete('project',poll.id)">🗑 永久刪除課程（含全部資料）</button>
                     </div>
                 </div>
                 
@@ -413,8 +413,8 @@
                   <button v-if="activeSessionId&&!session.state.finishedAt" class="rounded-action danger" @click="finishSession">🏁 結束本場</button>
                 </div>
                 <details class="archive-folder" open style="margin-top:16px" aria-label="未結束場次管理">
-                  <summary>🏁 未結束場次管理{{unfinishedScanned?'（'+unfinishedSessions.length+' 場）':''}} — 找到阻擋永久刪除的舊場次</summary>
-                  <p class="small">如果目前場次已顯示「課後回顧」，但仍無法永久刪除，通常代表本專案<strong>其他較早的場次</strong>尚未結束。此處可搜尋全部場次，不限最近 50 場。結束場次不會清除題目、學員答題、成績或排行榜。</p>
+                  <summary>🏁 未結束場次管理{{unfinishedScanned?'（'+unfinishedSessions.length+' 場）':''}} — 可結束或直接刪除</summary>
+                  <p class="small">這裡可查看未結束的場次。<strong>永久刪除不再要求先結束場次</strong>；您也可以直接到下方「全部歷史場次與永久清理」，選擇要刪除的場次。結束場次僅會停止作答並保留所有紀錄。</p>
                   <button class="rounded-action" type="button" :disabled="unfinishedLoading||working" @click="loadUnfinishedSessions">{{unfinishedLoading?'搜尋中…':'🔎 搜尋所有未結束場次'}}</button>
                   <p class="small" v-if="unfinishedScanned&&!unfinishedSessions.length" style="color:#166534">✅ 沒有發現尚未結束的場次；如果刪除仍失敗，請重新整理後再試。</p>
                   <div v-for="u in unfinishedSessions" :key="u.id" class="itemline" style="margin-top:10px">
@@ -424,15 +424,36 @@
                     <div class="flexline" style="margin-top:9px">
                       <button class="rounded-action" type="button" @click="openHistory(u.id)" :disabled="unfinishedLoading||working">查看紀錄</button>
                       <button class="rounded-action danger" type="button" @click="finishUnfinishedSession(u)" :disabled="unfinishedLoading||working">🏁 結束此場（保留答題資料）</button>
+                      <button class="rounded-action permanent-action" type="button" @click="preparePermanentDelete('session',u.id)" :disabled="unfinishedLoading||working">🗑 永久刪除此場（含答案）</button>
                     </div>
                   </div>
                 </details>
                 <div v-if="historySessions.length" class="field" style="margin-top:12px"><label>歷史場次（回顧不影響目前課程）</label>
                   <div v-for="h in historySessions" :key="h.id" class="itemline flexline" style="justify-content:space-between">
                     <div><b>{{h.setName}}</b><div class="small">{{new Date(h.createdAt).toLocaleString()}}・{{h.published}} / {{h.count}} 題已公布</div></div>
-                    <button class="rounded-action" @click="openHistory(h.id)">回看</button>
+                    <div class="flexline"><button class="rounded-action" @click="openHistory(h.id)">回看</button><button class="rounded-action permanent-action" @click="preparePermanentDelete('session',h.id)">🗑 永久刪除此場</button></div>
                   </div>
                 </div>
+                <details class="archive-folder" open style="margin-top:14px" aria-label="全部歷史場次與永久清理">
+                  <summary>🗑 全部歷史場次與永久清理{{allSessionsLoaded?'（'+allSessionRows.length+' 場）':''}} — 可刪除任何舊場次</summary>
+                  <p class="small">點選「列出全部場次」可找到<strong>所有</strong>課堂，包括以前封存題組留下的場次、尚未結束的場次及不在最近 50 場的舊紀錄。刪除後該場的題目快照、學員、作答、結果與排行榜會從 Firebase 移除。題庫中的題目不會被刪除。</p>
+                  <div class="flexline">
+                    <button class="rounded-action primary" type="button" :disabled="allSessionsLoading||working" @click="loadAllSessions">{{allSessionsLoading?'讀取中…':'🔎 列出全部場次'}}</button>
+                    <button class="rounded-action permanent-action" type="button" :disabled="!allSessionsLoaded||!allSessionRows.length||working" @click="preparePermanentDelete('sessionsAll',projectId)">⚠ 清空本專案所有場次（{{allSessionRows.length}}）</button>
+                    <button class="rounded-action permanent-action" type="button" :disabled="working" @click="preparePermanentDelete('backupsAll',projectId)">🧹 清除本專案雲端版本備份</button>
+                  </div>
+                  <p v-if="allSessionsLoaded&&!allSessionRows.length" class="small" style="color:#166534">✅ 本專案在 Firebase 中已沒有上課場次。</p>
+                  <div v-for="h in allSessionRows" :key="'all-'+h.id" class="itemline" style="margin-top:9px">
+                    <div class="flexline" style="justify-content:space-between;align-items:start"><b>📚 {{h.setName}}</b><span class="pill" :class="h.finishedAt?'green':'amber'">{{h.finishedAt?'已結束':'未結束'}}</span></div>
+                    <div class="small">{{new Date(h.createdAt).toLocaleString()}}・{{h.published}} / {{h.count}} 題已公布・{{h.members}} 位學員</div>
+                    <div class="small">識別碼：{{h.id}} <span v-if="h.id===activeSessionId">（目前場次）</span></div>
+                    <div class="flexline" style="margin-top:8px">
+                      <button class="rounded-action" type="button" @click="openHistory(h.id)">回看</button>
+                      <button class="rounded-action permanent-action" type="button" :disabled="working" @click="preparePermanentDelete('session',h.id)">🗑 永久刪除此場</button>
+                    </div>
+                  </div>
+                  <p class="small">「清除版本備份」只處理本專案的雲端操作歷史備份，不會刪題庫或上課場次。真正刪除前都會建立本機 checkpoint 並要求確認下載檔案。</p>
+                </details>
               </section>
               <section class="panel" v-if="activeSessionId&&!reviewMode">
                 <h2>📊 當前題目</h2>
@@ -640,7 +661,7 @@
 </div>
 <script>
 /*
- * 課堂互動答題系統 v1.6.1 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
+ * 課堂互動答題系統 v1.7 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
  * 此前端保留原登入密碼流程以便移轉；前端密碼並不是可靠的管理員驗證。
  * 若要正式上線，必須改採 Firebase Authentication + 限制性的 Database Rules。
  * 本系統所有資料在 classroomQuizV1 路徑，絕不改寫舊 polls/pollsList。
@@ -723,6 +744,7 @@
       fixedSessionId:'', inlineReviewMode:false,historyIndex:0, historySessions:[], historySelectedId:'',
       historyRecord:null, historyLoading:false,
       unfinishedSessions:[],unfinishedLoading:false,unfinishedScanned:false,
+      allSessionRows:[],allSessionsLoaded:false,allSessionsLoading:false,
       reviewMode:false,reviewIndex:0,reviewSourceId:'',
       revealProgress:1,revealAnimating:false,rankAnimationPhase:'after',rankOldRows:[],rankNewRows:[],
       rankShifts:{},animatingQuestionId:'',revealRaf:null,revealSerial:0,
@@ -793,7 +815,7 @@
     watch: {
       selectedSetId(){this.setAnswerMode=this.sets[this.selectedSetId]?.answerMode||'quick';},
       currentQuestionId() {this.stopRevealAnimation();this.selection=[];this.myAnswer=null;this.sending=false;this.answerStatus='idle';this.answerError='';this.failedPicks=[];this.answerScope='';this.jumpQuestionId=this.currentQuestionId;this.bindCurrentAnswer();},
-      projectId() {this.$nextTick(()=>this.renderQR());},
+      projectId() {this.allSessionRows=[];this.allSessionsLoaded=false;this.$nextTick(()=>this.renderQR());},
       qrVisible(){this.$nextTick(()=>this.renderQR());}
     },
     mounted(){
@@ -948,17 +970,20 @@
           }
           const affected=Object.values(source.sessions||{}).filter(sess=>kind==='set'?sess.setId===id:(kind==='question'?!!sess.questions?.[id]:false));
           const openSessions=this.collectUnfinishedSessions(source.sessions||{});
-          if((kind==='set'||kind==='question')&&affected.some(sess=>!sess.state?.finishedAt)){
-            this.unfinishedSessions=openSessions;this.unfinishedScanned=true;
-            throw Error('這些題目仍屬於未結束的課堂場次。請向下找到「未結束場次管理」，逐場確認並按「結束此場」（不刪答題資料）後再試。');
-          }
-          if(kind==='project'&&openSessions.length){
-            this.unfinishedSessions=openSessions;this.unfinishedScanned=true;
-            throw Error('此專案有 '+openSessions.length+' 場尚未結束；請在講師控制台的「未結束場次管理」處理，不要按「開始」建立新場次。');
-          }
-          const impact=kind==='question'?`將刪除題庫中的 1 題及 ${affected.length} 個歷史場次內對應的答題與統計；其他題目重新計算名次。`:
-            kind==='set'?`將刪除整個題組與 ${targetQuestionIds.length} 題，以及該題組 ${affected.length} 個歷史場次（含成績）。`:
-            '將刪除整個專案、題組、題目、上課場次、成績與相關雲端封存資料。';
+          if(kind==='session' && !source.sessions?.[id])throw Error('此場次已不存在，請重新列出場次');
+          if(kind==='sessionsAll' && !Object.keys(source.sessions||{}).length)throw Error('這個專案已經沒有任何場次');
+          if(kind==='backupsAll' && !Object.keys(source.backups||{}).length)throw Error('這個專案沒有雲端版本備份');
+          if(kind==='session'){
+            const target=source.sessions[id];const n=target?.setName||'未命名題組';
+            label='場次：'+n+'（'+id.slice(-8)+'）';
+          }else if(kind==='sessionsAll')label='全部 '+Object.keys(source.sessions||{}).length+' 場上課紀錄';
+          else if(kind==='backupsAll')label='本專案全部雲端版本備份';
+          const impact=kind==='question'?`將永久刪除題庫中的這 1 題及 ${affected.length} 個相關場次裡的該題作答、統計及快照，其他題目的成績重新計算。如有尚未結束的受影響場次，將一併標記為停止作答，其他題目的紀錄保留。`:
+            kind==='set'?`將永久刪除此題組的 ${targetQuestionIds.length} 題與 ${affected.length} 個所屬場次（包含歷史回看、成績及尚未結束的場次）。`:
+            kind==='session'?`將永久刪除此場次的全部資料：學員 ${Object.keys(source.sessions[id]?.members||{}).length} 位、${(source.sessions[id]?.order||[]).length} 題快照、所有作答、投票結果及排行榜；題庫與其他場次不受影響。${source.runtime?.activeSessionId===id?'這是目前場次，刪除後會清除正在上課的指向。':''}`:
+            kind==='sessionsAll'?`將永久刪除本專案全部 ${Object.keys(source.sessions||{}).length} 個場次（包含正在進行、已結束、已回看），連同場次的學員、答題、結果、排行榜與相關場次備份；保留專案、題組與題庫。`:
+            kind==='backupsAll'?`將永久清除本專案全部 ${Object.keys(source.backups||{}).length} 筆雲端版本備份，以釋放空間；保留課程題庫、場次及成績。之後不能靠舊版雲端備份回復過去版本，務必保存本機下載檔。`:
+            `將永久刪除整個專案、題組、題目、所有上課場次、成績、此專案的版本備份，以及相同專案 ID 的全部雲端封存副本（目前有 ${openSessions.length} 個未結束場次也會一併刪除）。`;
           const record={format:'classroom-quiz-before-remove-v1',backupId:'before_remove_'+new Date().toISOString().replace(/[:.]/g,'-')+'_'+uid().slice(0,8),savedAt:new Date().toISOString(),kind,projectId,archiveId,targetId:id,projectMeta:clone(meta),projectData:clone(source),impact};
           await this.saveLocalCheckpoint(record);
           this._pendingPurge={kind,id,projectId,archiveId,backup:record,sourceSignature:JSON.stringify({meta,source})};
@@ -971,6 +996,28 @@
       makePermanentDeleteChanges(projectId,source,kind,id){
         const base=`${ROOT}/projects/${projectId}`;
         const changes={};const isSet=kind==='set';
+        // 場次與備份均可不需先結束而直接永久清理，避免舊場次狀態衝突造成無法清空。
+        if(kind==='session' || kind==='sessionsAll' || kind==='backupsAll'){
+          if(kind==='backupsAll'){
+            changes[`${base}/backups`]=null;
+          }else if(kind==='sessionsAll'){
+            changes[`${base}/sessions`]=null;
+            changes[`${base}/runtime/activeSessionId`]=null;
+          }else{
+            changes[`${base}/sessions/${id}`]=null;
+            if(source.runtime?.activeSessionId===id)changes[`${base}/runtime/activeSessionId`]=null;
+          }
+          if(kind!=='backupsAll'){
+            for(const [bid,b] of Object.entries(source.backups||{})){
+              if(bid==='meta')continue;
+              const raw=JSON.stringify(b||{});
+              if(kind==='sessionsAll'?raw.includes('/sessions/')||raw.includes('before_finish_old_session'):
+                raw.includes(`/sessions/${id}`)||raw.includes(`\"sessionId\":\"${id}\"`))changes[`${base}/backups/${bid}`]=null;
+            }
+          }
+          return changes;
+        }
+
         const targets=new Set(isSet?Object.keys(source.questions||{}).filter(qid=>source.questions[qid]?.setId===id):[id]);
         if(isSet){changes[`${base}/sets/${id}`]=null;}
         for(const qid of targets)changes[`${base}/questions/${qid}`]=null;
@@ -981,13 +1028,14 @@
           const direct=path===`projects/${projectId}/sets/${id}`&&isSet || [...targets].some(qid=>path===`projects/${projectId}/questions/${qid}`);
           const reorder=path==='questions'&&Object.keys(b?.old||{}).some(qid=>targets.has(qid));
           const coupled=b?.action==='before_restore_archived_question_and_set'&&(targets.has(b.questionId)||(isSet&&b.setId===id));
-          if(direct||reorder||coupled)changes[`${base}/backups/${bid}`]=null;
+          if(direct||reorder||coupled||[...targets].some(qid=>JSON.stringify(b||{}).includes(qid))||(isSet&&JSON.stringify(b||{}).includes(id)))changes[`${base}/backups/${bid}`]=null;
         }
         // 優先保護仍在測驗的場次，不能帶著作答寫入進行整批覆寫。
         for(const [sid,original] of Object.entries(source.sessions||{})){
           const affected=isSet?original?.setId===id:!!original?.questions?.[id];
           if(!affected)continue;
-          if(!original.state?.finishedAt)throw Error('有尚未結束的相關場次，已取消刪除');
+          // 不要求先結束場次；刪除題組直接連同所屬場次完整移除。
+          // 刪單題時則安全停止受影響舊場次，再更新題序與剩餘成績，避免其他題作答丟失。
           if(isSet){changes[`${base}/sessions/${sid}`]=null;}
           else{
             const sess=clone(original);
@@ -1008,6 +1056,7 @@
               const correctedIndex=nextIdx>=0?nextIdx:Math.min(Math.max(0,original.state?.questionIndex||0),sess.order.length-1);
               sess.state.questionIndex=correctedIndex;
               sess.state.questionId=sess.order[correctedIndex];
+              if(!sess.state.finishedAt){sess.state.finishedAt=now()+this.serverOffset;sess.state.phase=sess.results?.[sess.state.questionId]?'revealed':'closed';sess.state.deadlineAt=0;}
               if(sess.state.startedQuestions)delete sess.state.startedQuestions[id];
               changes[`${base}/sessions/${sid}`]=sess;
             }
@@ -1031,19 +1080,43 @@
             changes[`${ROOT}/archives/${archiveId}`]=null;changes[`${ROOT}/archiveList/${archiveId}`]=null;
           }else{
             source=(await refPath(`projects/${projectId}`).once('value')).val();meta=(await refPath(`projectsList/${projectId}`).once('value')).val();
-            if(!source||!meta||JSON.stringify({meta,source})!==sourceSignature)throw Error('資料自備份後已更新，可能有新作答或設定；請重新建立最新備份再刪除');
+            if(!source||!meta||JSON.stringify({meta,source})!==sourceSignature)throw Error('雲端資料在備份後已變動；請重新點選「永久刪除」取得最新備份後再確認');
             if(kind==='project'){
               changes[`${ROOT}/projects/${projectId}`]=null;changes[`${ROOT}/projectsList/${projectId}`]=null;
               // 清除同一專案先前殘留的封存副本及索引。
               const ars=(await refPath('archives').once('value')).val()||{};
               for(const [aid,a] of Object.entries(ars))if(a?.projectId===projectId){changes[`${ROOT}/archives/${aid}`]=null;changes[`${ROOT}/archiveList/${aid}`]=null;}
+              // 清除無完整 archive 副本但仍留在列表上的孤兒索引。
+              const arIdx=(await refPath('archiveList').once('value')).val()||{};
+              for(const [aid,item] of Object.entries(arIdx))if(item?.projectId===projectId){changes[`${ROOT}/archiveList/${aid}`]=null;changes[`${ROOT}/archives/${aid}`]=null;}
             }else changes=this.makePermanentDeleteChanges(projectId,source,kind,id);
           }
           const size=new Blob([JSON.stringify(changes)]).size;
           if(size>12*1024*1024)throw Error('本次更新超過安全的單次寫入容量，已停止且不刪除。請分批清理或使用伺服器管理工具。');
           await db.ref().update(changes);
+          // 立即回讀目標，區分「實際清除」與權限拒絕、殘留或其他裝置重新寫入。
+          const verifyPaths=kind==='session'?[`projects/${projectId}/sessions/${id}`]:
+            kind==='sessionsAll'?[`projects/${projectId}/sessions`]:
+            kind==='backupsAll'?[`projects/${projectId}/backups`]:
+            kind==='project'?[`projects/${projectId}`,`projectsList/${projectId}`]:
+            kind==='archivedProject'?[`archives/${archiveId}`,`archiveList/${archiveId}`]:
+            kind==='set'?[`projects/${projectId}/sets/${id}`]:[`projects/${projectId}/questions/${id}`];
+          for(const path of verifyPaths){if((await refPath(path).once('value')).exists())throw Error('雲端資料仍存在：'+path+'。請勿認為已清除，重新檢查其他裝置連線或資料庫權限。');}
           this.purgeModal.show=false;this._pendingPurge=null;
           if(kind==='archivedProject'){this.archiveList=this.archiveList.filter(x=>x.archiveId!==archiveId);}
+        if(kind==='session'||kind==='sessionsAll'){
+          if(kind==='session'){
+            this.historySessions=this.historySessions.filter(x=>x.id!==id);
+            this.unfinishedSessions=this.unfinishedSessions.filter(x=>x.id!==id);
+            this.allSessionRows=this.allSessionRows.filter(x=>x.id!==id);
+            if(this.historySelectedId===id||this.reviewSourceId===id)this.closeReview();
+            if(this.fixedSessionId===id&&this.inlineReviewMode)this.exitInlineReview();
+          }else{
+            this.historySessions=[];this.unfinishedSessions=[];this.unfinishedScanned=true;
+            this.allSessionRows=[];this.allSessionsLoaded=true;this.closeReview();
+            if(this.inlineReviewMode)this.exitInlineReview();
+          }
+        }
           if(kind==='set'&&this.selectedSetId===id)this.selectedSetId='';
           this.showMessage('✅ Firebase 已永久刪除；JSON 備份與本機 checkpoint 仍可用於還原');
         }catch(e){this.errorMessage='永久刪除未完成：'+e.message;this.showMessage('❌ 永久刪除取消：'+e.message);}
@@ -1243,14 +1316,13 @@
             if(!existing?.state)throw Error('場次資料不存在或狀態遺失，已停止');
             if(existing.state.finishedAt){this.showMessage('✅ 這一場已經結束');return;}
             const oldState=clone(existing.state);
-            const expected=JSON.stringify(oldState);
             const b=refPath(`projects/${this.projectId}/backups`).push();
             // 確保備份成功才允許變更狀態。永不自動清除既有作答。
             await b.set({path:path+'/state',old:oldState,action:'before_finish_old_session',sessionId:sid,setName:label,savedAt:now()});
             const finishedTime=now()+this.serverOffset;
             const hasPublished=!!existing.results?.[oldState.questionId];
             const tx=await refPath(path+'/state').transaction(state=>{
-              if(!state||state.finishedAt||JSON.stringify(state)!==expected)return;
+              if(!state||state.finishedAt)return;
               return {...state,phase:hasPublished?'revealed':'closed',finishedAt:finishedTime,deadlineAt:0};
             },undefined,false);
             if(!tx.committed)throw Error('場次狀態已被其他視窗改動，為保護資料請重新搜尋再操作');
@@ -1259,6 +1331,21 @@
           }catch(e){this.showMessage('❌ 結束場次失敗：'+e.message);}
           finally{this.working=false;await this.loadUnfinishedSessions();}
         });
+      },
+      async loadAllSessions(){
+        if(!this.hasAdminAccess||this.allSessionsLoading)return;
+        this.allSessionsLoading=true;
+        try{
+          const snap=await refPath(`projects/${this.projectId}/sessions`).once('value');
+          this.allSessionRows=Object.entries(snap.val()||{}).map(([id,v])=>({
+            id,setName:v.setName||'未命名題組',createdAt:Number(v.createdAt)||0,
+            finishedAt:Number(v.state?.finishedAt)||0,count:(v.order||[]).length,
+            published:Object.keys(v.results||{}).length,members:Object.keys(v.members||{}).length
+          })).sort((a,b)=>b.createdAt-a.createdAt);
+          this.allSessionsLoaded=true;
+          this.showMessage('✅ 已列出全部 '+this.allSessionRows.length+' 場（包含未結束場次）');
+        }catch(e){this.errorMessage='無法讀取全部場次：'+e.message;this.showMessage('❌ 無法讀取全部場次');}
+        finally{this.allSessionsLoading=false;}
       },
       async loadHistory(){
         if(this.historyLoading)return;
@@ -1364,7 +1451,7 @@
       resultPercent(i){const r=this.currentResult;return r?.total?Math.round(1000*(r.counts?.[i]||0)/r.total)/10:0;},
       async joinClass(){const nick=this.nickInput.trim();if(!nick)return this.showMessage('請先輸入暱稱');if(!this.studentId)this.studentId=uid();try{localStorage.setItem(`cq_id_${this.projectId}`,this.studentId);localStorage.setItem(`cq_nick_${this.projectId}`,nick);}catch(e){this.showMessage('⚠️ 無法保存至瀏覽器，重新整理後可能失去身分');}this.studentNickname=nick;await this.registerMember();this.bindCurrentAnswer();},
       changeNickname(){this.nickInput=this.studentNickname;this.studentNickname='';try{localStorage.removeItem(`cq_nick_${this.projectId}`);}catch(e){}},
-      async registerMember(){if(!this.activeSessionId||!this.studentId||!this.studentNickname)return;const r=refPath(`projects/${this.projectId}/sessions/${this.activeSessionId}/members/${this.studentId}`);try{await r.transaction(m=>m?{...m,nickname:this.studentNickname}:{nickname:this.studentNickname,joinedAt:now()},undefined,false);}catch(e){this.errorMessage='無法加入此場次：'+e.message;this.showMessage('❌ 加入失敗');}},
+      async registerMember(){if(!this.activeSessionId||!this.studentId||!this.studentNickname)return;const sid=this.activeSessionId;const r=refPath(`projects/${this.projectId}/sessions/${sid}/members/${this.studentId}`);try{const state=(await refPath(`projects/${this.projectId}/sessions/${sid}/state`).once('value')).val();if(!state||state.finishedAt)return;await r.transaction(m=>m?{...m,nickname:this.studentNickname}:{nickname:this.studentNickname,joinedAt:now()},undefined,false);}catch(e){this.errorMessage='無法加入此場次：'+e.message;this.showMessage('❌ 加入失敗');}},
       // 單選／是非／意見投票：點一下立即送出並鎖定；多選：每點一次就即時寫入目前勾選。
       pickOption(letter){
         if(!this.canStudentAnswer)return;
@@ -1387,7 +1474,11 @@
         if(!picksNow.length){this.selection=[...(this.myAnswer?.picks||[])];this.answerStatus='saved';this.showMessage('⚠️ 至少保留一個選項，如需調整請點其他選項');return;}
         this.answerScope=scope;this.sending=true;this.answerStatus='sending';this.answerError='';
         try{
-          // 直接送到 Firebase：不再為了等待一次多餘的 state 讀取，造成手機點選後遲遲無反應。
+          // 若場次已由講師永久刪除／結束，不可讓舊裝置重新建立孤兒 answer 節點。
+          const live=(await refPath(`projects/${this.projectId}/sessions/${sid}/state`).once('value')).val();
+          if(!live||live.finishedAt||live.questionId!==qid||live.phase!=='asking')throw Error('本題已停止、場次已結束或已永久刪除，不能再提交。');
+          // 伺服器 Rules 仍應檢查父場次存在及開放狀態，避免競態重新寫入。
+          // 直接送到 Firebase：不用額外確認送出。
           const path=`projects/${this.projectId}/sessions/${sid}/answers/${qid}/${this.studentId}`;
           const submittedAt=now()+this.serverOffset;
           const multi=this.currentQuestion.type==='multi';
