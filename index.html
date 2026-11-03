@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v1.7｜全部場次・永久刪除・雲端空間清理</title>
+<title>課堂互動即時答題系統 v1.8｜題組 JSON 匯入・完整場次管理</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -344,6 +344,13 @@
               <h2>📚 題組管理</h2>
               <div class="field"><label>新增題組名稱</label><input v-model.trim="newSetName" placeholder="例如：課前測驗" @keydown.enter="createSet"></div>
               <button class="rounded-action primary" @click="createSet">＋ 建立題組</button>
+              <div class="import-set-box" style="margin-top:13px">
+                <div style="font-weight:800;color:#075985;margin-bottom:7px">📥 匯入題組 JSON（v1.8）</div>
+                <div class="small" style="margin-bottom:9px">直接新增至目前專案，不覆蓋舊題組、場次、學員或成績。可同時選取 3 份 JSON；每份新增一個題組。</div>
+                <button class="rounded-action primary" type="button" :disabled="working" @click="chooseSetImportFiles">📂 選擇題組 JSON 匯入</button>
+                <input ref="setImportInput" type="file" accept=".json,application/json" multiple style="display:none" @change="importSetFiles">
+                <div class="small" style="margin-top:8px">匯入前自動建立本機 checkpoint 並下載完整專案備份，確認後才新增資料。相同來源的題組不可重複匯入。</div>
+              </div>
               <div class="hline"></div>
               <div v-if="activeSets.length===0" class="empty">尚未建立題組，請從上方新增。</div>
               <div v-for="s in activeSets" :key="s.id" class="itemline" :class="{active:selectedSetId===s.id}">
@@ -644,7 +651,7 @@
           <div class="flexline" style="justify-content:flex-end"><button class="rounded-action danger" :disabled="working||purgeModal.typed!=='永久刪除'" @click="commitPermanentDelete">{{working?'正在檢查資料…':'確認永久刪除並釋放雲端空間'}}</button></div>
         </div></div>
         <input id="global-recovery-input" type="file" accept=".json,application/json" style="display:none" @change="restoreDownloadedCheckpoint">
-        <div class="modal-scrim" v-if="confirmModal.show"><div class="modal-panel" style="max-width:440px"><h2>⚠️ 確認操作</h2><p>{{confirmModal.message}}</p><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="confirmModal.show=false">取消</button><button class="rounded-action danger" @click="executeConfirm">確定</button></div></div></div>
+        <div class="modal-scrim" v-if="confirmModal.show"><div class="modal-panel" style="max-width:440px"><h2>⚠️ 確認操作</h2><p style="white-space:pre-wrap;overflow-wrap:anywhere">{{confirmModal.message}}</p><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="confirmModal.show=false">取消</button><button class="rounded-action danger" @click="executeConfirm">確定</button></div></div></div>
         <div class="modal-scrim" v-if="renameModal.show"><div class="modal-panel" style="max-width:480px"><h2>✏️ 重新命名課程專案</h2><div class="field"><input v-model.trim="renameModal.newName" @keydown.enter="executeRename" placeholder="請輸入新名稱"></div><div class="flexline" style="justify-content:flex-end"><button class="rounded-action" @click="renameModal.show=false">取消</button><button class="rounded-action primary" @click="executeRename">儲存</button></div></div></div>
         <div class="modal-scrim" v-if="questionModal.show"><div class="modal-panel"><h2>{{questionModal.id?'✏️ 編輯題目':'＋ 建立新題目'}}</h2>
           <div class="field"><label>題目文字</label><textarea v-model.trim="questionModal.text" maxlength="1000" placeholder="請輸入題目"></textarea></div>
@@ -661,7 +668,7 @@
 </div>
 <script>
 /*
- * 課堂互動答題系統 v1.7 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
+ * 課堂互動答題系統 v1.8 - 全螢幕遊戲化結果與排行榜 / 手機極簡 / 2～4 選項
  * 此前端保留原登入密碼流程以便移轉；前端密碼並不是可靠的管理員驗證。
  * 若要正式上線，必須改採 Firebase Authentication + 限制性的 Database Rules。
  * 本系統所有資料在 classroomQuizV1 路徑，絕不改寫舊 polls/pollsList。
@@ -723,6 +730,39 @@
   if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const refPath = p => db.ref(`${ROOT}/${p}`);
+
+  // v1.8：題組檔案格式檢查。純函式；檢查全部通過後才能開始任何資料庫寫入。
+  function parseImportedQuizSet(raw, fileName){
+    if(!raw || Array.isArray(raw) || typeof raw!=='object')throw Error(`${fileName}：JSON 頂層不是物件`);
+    if(raw.format!=='classroom-quiz-set-v1'||raw.schemaVersion!==1)throw Error(`${fileName}：不是 v1.8 題組匯入格式`);
+    const name=typeof raw.setName==='string'?raw.setName.trim():'';
+    if(!name||name.length>80)throw Error(`${fileName}：題組名稱不可空白且不能超過 80 字`);
+    const sourceId=typeof raw.sourceId==='string'?raw.sourceId.trim():'';
+    if(!/^[a-z0-9_.-]{3,100}$/i.test(sourceId))throw Error(`${fileName}：來源識別碼不合法`);
+    const qs=raw.questions;
+    if(!Array.isArray(qs)||qs.length<1||qs.length>100)throw Error(`${fileName}：題數必須介於 1～100 題`);
+    const used=new Set();
+    const questions=qs.map((q,i)=>{
+      const tag=`${fileName} 第 ${i+1} 題`;
+      if(!q||typeof q!=='object'||Array.isArray(q))throw Error(`${tag}：資料結構錯誤`);
+      if(q.type!=='single')throw Error(`${tag}：目前只接受四選一單選題`);
+      const text=typeof q.text==='string'?q.text.trim():'';
+      if(!text||text.length>1000)throw Error(`${tag}：題幹必須為 1～1000 字`);
+      if(used.has(text))throw Error(`${tag}：同檔內出現重複題幹`);
+      used.add(text);
+      if(!Array.isArray(q.options)||q.options.length!==4||q.options.some(x=>typeof x!=='string'||!x.trim()||x.trim().length>200))throw Error(`${tag}：必須提供四個非空白選項（每項最多 200 字）`);
+      const options=q.options.map(x=>x.trim());
+      if(new Set(options).size!==4)throw Error(`${tag}：四個選項不得重複`);
+      if(!Array.isArray(q.correct)||q.correct.length!==1||!['A','B','C','D'].includes(q.correct[0]))throw Error(`${tag}：正解必須為 A、B、C、D 其中一個`);
+      const duration=q.duration===undefined?0:q.duration;
+      if(!Number.isInteger(duration)||duration<0||duration>3600)throw Error(`${tag}：作答秒數必須為 0～3600 的整數`);
+      const explanation=q.explanation===undefined?'':q.explanation;
+      if(typeof explanation!=='string'||explanation.length>2000)throw Error(`${tag}：答案解析不可超過 2000 字`);
+      return {type:'single',text,options,correct:[q.correct[0]],duration,explanation:explanation.trim()};
+    });
+    return {name,sourceId,questions};
+  }
+
   const { createApp } = Vue;
 
   createApp({
@@ -933,7 +973,7 @@
         });
       },
       downloadCheckpoint(record){
-        const name=`課堂答題_before_remove_${record.kind}_${record.backupId}.json`;
+        const name=`課堂答題_${record.kind==='before_import'?'before_import':'before_remove'}_${record.kind}_${record.backupId}.json`;
         const bytes=JSON.stringify(record,null,2);
         const blob=new Blob([bytes],{type:'application/json;charset=utf-8'});
         const url=URL.createObjectURL(blob);
@@ -1138,6 +1178,80 @@
           await db.ref().update(changes);
           this.showMessage('✅ 已還原為獨立的新專案；原有資料未覆寫');
         }catch(e){this.errorMessage='備份還原未完成：'+e.message;this.showMessage('❌ 無法還原：'+e.message);}finally{event.target.value='';}
+      },
+      // v1.8｜可在既有專案「新增題組」；不走還原整個專案的舊入口。
+      chooseSetImportFiles(){
+        if(!this.hasAdminAccess || this.currentView!=='teacher')return this.showMessage('請先登入講師管理頁');
+        if(this.working)return;
+        const input=this.$refs.setImportInput;
+        if(!input)return this.showMessage('找不到題組匯入元件');
+        input.value='';input.click();
+      },
+      async importSetFiles(event){
+        const files=Array.from(event?.target?.files||[]);
+        if(event?.target)event.target.value='';
+        if(!files.length)return;
+        if(!this.hasAdminAccess||this.currentView!=='teacher'||!this.projectId)return this.showMessage('只能在已登入的專案講師頁匯入');
+        if(this.working)return this.showMessage('目前有其他操作，請完成後再匯入');
+        this.working=true;
+        try{
+          if(files.length>20)throw Error('一次最多匯入 20 份題組 JSON');
+          const incoming=[],seenSources=new Set();
+          for(const f of files){
+            if(f.size>1024*1024)throw Error(`${f.name} 超過 1 MB 限制，已停止全部匯入`);
+            let raw;try{raw=JSON.parse(await f.text());}catch(e){throw Error(`${f.name}：JSON 格式無法解析`);}
+            const parsed=parseImportedQuizSet(raw,f.name);
+            if(seenSources.has(parsed.sourceId))throw Error(`所選檔案來源重複：${parsed.name}`);
+            seenSources.add(parsed.sourceId);incoming.push(parsed);
+          }
+          const projectId=this.projectId;
+          const rootRef=refPath(`projects/${projectId}`);
+          const original=(await rootRef.once('value')).val();
+          if(!original?.meta)throw Error('找不到目前專案；已停止匯入');
+          const existingSets=Object.values(original.sets||{});
+          const duplicated=incoming.find(x=>existingSets.some(s=>s.importSourceId===x.sourceId));
+          if(duplicated)throw Error(`已匯入過「${duplicated.name}」；為防止重複，整批未匯入。`);
+          // 完整保留專案資料（含原題組、場次、學員、答案），沿用 v1.7 的本機可還原備份格式。
+          const projectMeta=clone(original.meta);
+          const record={format:'classroom-quiz-before-remove-v1',backupId:'before_import_'+new Date().toISOString().replace(/[:.]/g,'-')+'_'+uid().slice(0,8),savedAt:new Date().toISOString(),kind:'before_import',projectId,projectMeta,projectData:clone(original),impact:'v1.8 題組 JSON 匯入前完整專案快照（只新增題組與題目）'};
+          if(new Blob([JSON.stringify(record)]).size>20*1024*1024)throw Error('現有專案備份超過 20 MB 安全限制；為保護現有資料，尚未匯入。');
+          await this.saveLocalCheckpoint(record); // 本機 checkpoint 失敗即停止
+          const backupFile=this.downloadCheckpoint(record);
+          const detail=incoming.map(x=>`「${x.name}」${x.questions.length} 題`).join('、');
+          this.askConfirm(`已建立可還原的 before_import 本機 checkpoint，並已觸發下載：${backupFile}。\n\n請先確認下載資料夾確實有備份檔，再按「確定」匯入：${detail}。\n\n只新增題組與題目，不覆蓋或清空目前專案的場次、學員、答案與成績。`,async()=>{
+            if(this.working)throw Error('仍有另一項操作進行中');
+            this.working=true;
+            try{
+              if(this.projectId!==projectId)throw Error('目前專案已切換，停止匯入');
+              const fresh=(await rootRef.once('value')).val();
+              if(!fresh?.meta)throw Error('原專案不存在，停止匯入');
+              const originals=Object.values(fresh.sets||{});
+              const repeat=incoming.find(x=>originals.some(s=>s.importSourceId===x.sourceId));
+              if(repeat)throw Error(`「${repeat.name}」已經匯入過，這次不重複新增`);
+              const changes={};const stamp=now();const batch='import_'+uid();
+              let nextOrder=Math.max(stamp,...originals.map(s=>Number(s.order)||0))+100;
+              const newIds=[];
+              for(const group of incoming){
+                const sid=refPath(`projects/${projectId}/sets`).push().key;
+                changes[`${ROOT}/projects/${projectId}/sets/${sid}`]={name:group.name,order:nextOrder++,createdAt:stamp,updatedAt:stamp,archived:false,answerMode:'quick',importSourceId:group.sourceId,importBatchId:batch};
+                newIds.push(sid);
+                for(let i=0;i<group.questions.length;i++){
+                  const qid=refPath(`projects/${projectId}/questions`).push().key;
+                  changes[`${ROOT}/projects/${projectId}/questions/${qid}`]={...group.questions[i],setId:sid,order:stamp+i+1,createdAt:stamp,updatedAt:stamp,archived:false};
+                }
+              }
+              // 新產生的 push ID 不可與任何既有項目撞名；不允許使用來源提供的 Firebase ID。
+              if(Object.keys(changes).some(path=>{const pieces=path.split('/');const kind=pieces[3],id=pieces[4];return (kind==='sets'&&fresh.sets?.[id])||(kind==='questions'&&fresh.questions?.[id]);}))throw Error('偵測到項目識別碼衝突，已停止匯入');
+              if(new Blob([JSON.stringify(changes)]).size>12*1024*1024)throw Error('匯入內容超過雲端單次寫入安全大小，已停止');
+              await db.ref().update(changes); // 一次多路徑更新：全部成功或全部失敗
+              this.selectedSetId=newIds[0]||this.selectedSetId;
+              this.showMessage(`✅ 成功新增 ${incoming.length} 個題組，共 ${incoming.reduce((n,x)=>n+x.questions.length,0)} 題；原有資料未覆寫`);
+            }catch(e){this.errorMessage='題組匯入失敗：'+e.message;this.showMessage('❌ 題組匯入失敗：'+e.message);}
+            finally{this.working=false;}
+          });
+          this.showMessage('📥 已下載匯入前備份；請檢查檔案並確認匯入');
+        }catch(e){this.errorMessage='題組匯入未完成：'+e.message;this.showMessage('❌ '+e.message);}
+        finally{this.working=false;}
       },
       async createSet(){const n=this.newSetName.trim();if(!n)return this.showMessage('請輸入題組名稱');try{const r=refPath(`projects/${this.projectId}/sets`).push();await r.set({name:n,order:now(),createdAt:now(),archived:false,answerMode:'quick'});this.selectedSetId=r.key;this.newSetName='';this.showMessage('✅ 題組已建立');}catch(e){this.showMessage('❌ '+e.message);}},
       async versionedUpdate(path,oldData,newData,action){const backupId=refPath(`projects/${this.projectId}/backups`).push().key;const changes={};changes[`${ROOT}/projects/${this.projectId}/backups/${backupId}`]={path,old:clone(oldData),action,savedAt:now()};changes[`${ROOT}/${path}`]=newData;await db.ref().update(changes);},
