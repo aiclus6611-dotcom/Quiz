@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v1.8｜題組 JSON 匯入・完整場次管理</title>
+<title>課堂互動即時答題系統 v1.9｜投影解析可捲動・講師按下一題才顯示排名</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -272,6 +272,27 @@
 .archive-folder summary{font-weight:800;color:#1e40af;cursor:pointer;line-height:1.55}
 .archive-folder[open] summary{padding-bottom:8px;border-bottom:1px solid #dbe4ef;margin-bottom:9px}
 .archive-folder .itemline{background:white;margin:7px 0;overflow-wrap:anywhere}
+/* v1.9：投影題目與回看皆可用滑鼠滾輪、拖拉捲軸、觸控滑動查看長篇解析。
+   不變動登入、首頁、學生答題 2×2 佈局或任何既有資料。 */
+.proj-fullscreen .projection-layout{height:calc(100dvh - 220px);min-height:0;align-items:stretch}
+.proj-fullscreen .projection-layout .stage-question,
+.proj-fullscreen.review-view .projection-layout .stage-question{
+  height:100%;min-height:0;max-height:100%;overflow-y:auto;overflow-x:hidden;
+  justify-content:flex-start;overscroll-behavior:contain;touch-action:pan-y;
+  scrollbar-width:auto;scrollbar-color:#8ab5e7 #102643;
+  padding-bottom:clamp(28px,3vw,50px);
+}
+.proj-fullscreen .stage-question::-webkit-scrollbar{width:12px}
+.proj-fullscreen .stage-question::-webkit-scrollbar-track{background:#102643;border-radius:10px}
+.proj-fullscreen .stage-question::-webkit-scrollbar-thumb{background:#8ab5e7;border-radius:10px;border:2px solid #102643}
+.proj-fullscreen .projection-explanation{background:#071b35ed;border:2px solid #7dd3fc;border-radius:18px;padding:clamp(16px,2.2vw,32px);color:#f8fafc;width:100%;box-sizing:border-box;flex-shrink:0}
+.proj-fullscreen .projection-explanation h3{font-size:clamp(1.4rem,2.5vw,2.6rem);color:#fef08a;margin:0 0 14px;font-weight:900}
+.proj-fullscreen .projection-explanation .explanation-body{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:clamp(1.18rem,1.85vw,2.1rem);line-height:1.8;font-weight:650}
+.proj-fullscreen .scroll-hint{font-size:clamp(1rem,1.35vw,1.4rem);color:#fef08a;text-align:center;font-weight:850;line-height:1.6}
+.proj-fullscreen .stage-question .answer-tally{flex-shrink:0}
+.results-panel .answer-explanation-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}
+@media(max-width:700px){.proj-fullscreen .projection-layout{height:calc(100dvh - 245px);min-height:280px}.proj-fullscreen .projection-layout .stage-question{min-height:0}}
+@media(max-height:550px){.proj-fullscreen .projection-layout{height:calc(100dvh - 175px);min-height:190px}}
 </style>
 </head>
 <body>
@@ -408,10 +429,10 @@
                 <div class="teacher-steps v15-steps" v-if="!reviewMode" style="display:block">
                   <button class="rounded-action live-step" style="width:100%;min-height:78px;background:#f59e0b;border-color:#fef3c7;color:#111827;font-size:1.45rem" :disabled="projectionMainDisabled" @click="projectionMainAction">
                     {{projectionMainLabel}}
-                    <span class="step-hint">主按鈕固定位置：開始 → 看結果 → 下一題</span>
+                    <span class="step-hint">看結果後可慢慢講解；按「下一題」才展示排名，隨後自動出下一題</span>
                   </button>
                 </div>
-                <p class="small" v-if="!reviewMode">「看結果」會立即停止本題收答並公布正解；答對人數從 0 遞增，最新名次同步動畫變動。倒數到 0 只停止收答，不會自動公布或切題。</p>
+                <p class="small" v-if="!reviewMode">「看結果」只公布正解、票數及答案解析，不自動跳至排行榜；可一直停留、捲動講解。按「下一題」後才顯示排名動畫約 4 秒，接著自動進入下一題；最後一題的總排名則會停留到您手動回看。倒數到 0 也不會自動公布。</p>
                 <div class="hline"></div>
                 <div class="flexline">
                   <button class="rounded-action" @click="openCurrentReview" :disabled="!activeSessionId||historyLoading">📚 逐題回看全部結果</button>
@@ -470,13 +491,13 @@
                   <div class="options-grid"><div v-for="(o,i) in currentQuestion.options" :key="i" class="quiz-option" :style="{background:colors[i]}"><span class="correct-icon" v-if="phase==='revealed'&&currentQuestion.correct.includes(letters[i])">✓ 正解</span><span class="letter">{{letters[i]}}</span><span class="opt-text">{{o}}</span><span v-if="phase==='revealed'&&currentResult" class="vote-stat">{{resultCount(i)}} 票｜{{resultPercent(i)}}%</span></div></div>
                   <div v-if="phase==='revealed'" class="results-panel">
                     <h3>✅ {{currentQuestion.type==='poll'?'本題為意見投票':'正確答案：'+currentQuestion.correct.join('、')}}</h3>
-                    <div>{{currentQuestion.explanation || '解說時間由講師自由決定，點「下一題」才開始新題。'}}</div>
+                    <div class="answer-explanation-text">{{currentQuestion.explanation || '本題未填入答案解析，講師可自行補充。'}}</div>
                     <div class="reveal-score" v-if="currentQuestion.type!=='poll'">🎯 答對 <strong>{{displayedCorrectCount}}</strong> 人 <span class="small">／ 共 {{currentResult?.total||0}} 人作答</span></div>
                     <div class="small" v-else>本題 {{currentResult?.total||0}} 人作答</div>
                   </div>
                 </div>
                 <div v-else class="empty">尚未開始上課</div>
-                <div v-if="phase==='revealed'&&currentResult" class="rank-section">
+                <div v-if="phase==='revealed'&&currentResult&&rankRequestedAt" class="rank-section">
                   <h3>🏆 全班最新答題正確率排名 <span class="small">（每公布一題更新）</span></h3>
                   <transition-group name="rank-move" tag="div" class="rank-rows">
                     <div v-for="r in displayRankingRows" :key="r.id" class="rank-row" :class="{'rank-up':revealAnimating&&movement(r.id)>0,'rank-down':revealAnimating&&movement(r.id)<0}">
@@ -507,7 +528,7 @@
                     </div>
                   </div>
                   <div v-if="reviewResult" class="results-panel"><h3>{{reviewQuestion.type==='poll'?'意見投票結果':'✅ 正確答案：'+reviewQuestion.correct.join('、')}}</h3>
-                    <div>{{reviewQuestion.explanation||'講師可自行補充解說。'}}</div>
+                    <div class="answer-explanation-text">{{reviewQuestion.explanation||'本題未填入答案解析，講師可自行補充。'}}</div>
                     <div>本題已答 {{reviewResult.total||0}} 人<span v-if="reviewQuestion.type!=='poll'">｜答對 {{reviewResult.correctCount||0}} 人</span></div>
                   </div>
                   <div v-else class="note" style="margin-top:14px">本題尚未公布，回看不會自行補算或暴露正確答案。</div>
@@ -521,7 +542,7 @@
         </div>
 
         
-        <!-- 投影畫面：講師控制固定於相同位置；公布先正解動畫，再切全畫面排行 -->
+        <!-- 投影畫面：公布後停留在可捲動的正解與解析；只有按下一題才展示排名並自動切題 -->
         <div v-else-if="currentView==='display'" class="proj-fullscreen" :class="{'review-view':!!fixedSessionId}">
           <div v-if="errorMessage" class="alert" role="alert">{{errorMessage}}</div>
           <header class="showcase-head">
@@ -551,12 +572,12 @@
                 <span>準備開始：</span>
                 <select v-model="selectedSetId" style="max-width:250px;padding:9px;border:0;border-radius:8px" aria-label="選擇題組"><option disabled value="">選擇題組</option><option v-for="set in activeSets" :key="set.id" :value="set.id">{{set.name}}</option></select>
               </div>
-              <div v-else>{{phase==='asking'?('🟢 正在答題 · 已回答 '+currentAnswerCount+' 人'):phase==='closed'?'⏱ 作答結束，準備公布':phase==='revealed'?(isLastQuestion?'🏁 最後一題，隨時可以回看':'✨ 已公布，準備下一題'):'⏳ 等待開始'}}</div>
+              <div v-else>{{phase==='asking'?('🟢 正在答題 · 已回答 '+currentAnswerCount+' 人'):phase==='closed'?'⏱ 作答結束，準備公布':phase==='revealed'?(rankRequestedAt?(isLastQuestion?'🏆 最後總排名，可回看':'🏆 正在展示排名，接著自動下一題'):'📖 正解已公布，可向下捲動閱讀解析並自由講解'):'⏳ 等待開始'}}</div>
               <div style="font-size:.73em;opacity:.8;margin-top:3px">{{firebaseConnected?'● 雲端連線中':connectionKnown?'⚠ 雲端未連線':'正在連線'}}　<span v-if="phase==='asking'&&currentQuestion?.duration">剩餘 {{remainingSec}} 秒</span></div>
             </div>
             <button class="rounded-action primary-next" :disabled="projectionMainDisabled" @click="projectionMainAction">{{projectionMainLabel}}</button>
           </section>
-          <!-- 結果畫面第二幕：全螢幕排名，舊排名移到新排名、數字同步上升 -->
+          <!-- 只有手動按「下一題／最終排名」才顯示；展示後（非最後一題）自動進下一題 -->
           <section v-if="isRankScene" class="ranking-arena" aria-label="全班即時排行榜">
             <div class="ranking-head">
               <div><h2>🏆 即時排行榜</h2><div class="ranking-sub">第 {{session.state.questionIndex+1}} 題公布後 · 全班累積正確率排名</div></div>
@@ -586,13 +607,13 @@
               <h3 style="font-size:clamp(1.15rem,1.8vw,2rem);margin:4px 0">📱 掃碼參加</h3><div class="qr-render" ref="displayQr"></div>
               <div class="small">輸入暱稱，一起作答</div>
             </aside>
-            <div class="stage-question" :class="{'reveal-active':phase==='revealed'&&revealAnimating&&!fixedSessionId&&revealStage==='answer'}">
+            <div ref="projectionStage" tabindex="0" role="region" aria-label="題目與答案解析，可上下捲動" class="stage-question" :class="{'reveal-active':phase==='revealed'&&revealAnimating&&!fixedSessionId&&revealStage==='answer'}">
               <div v-if="!currentQuestion" class="student-wait">⏳ 等待講師選擇題組開始上課</div>
               <template v-else>
                 <div class="question-kicker"><span>QUESTION {{fixedSessionId?historyIndex+1:session.state.questionIndex+1}} / {{session.order.length}}</span>
                   <span v-if="fixedSessionId">📖 逐題回看 · 不播放動畫</span>
                   <span v-else-if="phase==='asking'">{{currentQuestion.duration?('剩餘 '+remainingSec+' 秒'):'不限時間'}}　·　{{currentAnswerCount}} 人已答</span>
-                  <span v-else-if="phase==='revealed'">✨ 正確答案已公布</span>
+                  <span v-else-if="phase==='revealed'">📖 已公布正解 · 可向下捲動看解析</span>
                   <span v-else>等待公布</span>
                 </div>
                 <h2>{{currentQuestion.text}}</h2>
@@ -609,6 +630,12 @@
                   <template v-if="currentQuestion.type!=='poll'">🎯 答對 <strong>{{displayedCorrectCount}}</strong> 人　／　{{currentResult.total||0}} 人作答</template>
                   <template v-else>📊 本題共有 {{currentResult.total||0}} 人參與</template>
                 </div>
+                <section v-if="phase==='revealed'&&currentResult" class="projection-explanation" aria-label="答案解析，可上下捲動查看完整內容">
+                  <h3>📖 答案解析</h3>
+                  <div class="explanation-body">{{currentQuestion.explanation || '本題沒有填入答案解析，可由講師現場補充說明。'}}</div>
+                </section>
+                <div v-if="phase==='revealed'&&currentResult&&!fixedSessionId" class="scroll-hint">↕ 可用滑鼠滾輪、右側捲軸或手指滑動閱讀完整解析；講師按「下一題」才會顯示排名</div>
+                <div v-if="phase==='revealed'&&currentResult&&fixedSessionId" class="scroll-hint">↕ 回看模式：可上下捲動完整解析，並自由選擇上一題／下一題</div>
                 <div v-else-if="phase==='closed'" style="font-size:1.2rem;font-weight:900;text-align:center;color:#fde68a">本題作答已截止，等待講師揭曉</div>
               </template>
             </div>
@@ -716,7 +743,8 @@
     rows.forEach((r,i)=>{const key=`${r.correct}-${r.score}`;if(key!==previous){rank=i+1;previous=key;}r.rank=rank;});
     return rows;
   }
-  const blankState = () => ({questionId:'',questionIndex:0,phase:'waiting',openedAt:0,deadlineAt:0,showLeaderboard:false});
+  const RANK_DISPLAY_MS = 4200; // 手動按下一題後，排名動畫展示時間；非最後一題結束後自動出新題。
+  const blankState = () => ({questionId:'',questionIndex:0,phase:'waiting',openedAt:0,deadlineAt:0,showLeaderboard:false,rankStartedAt:0});
   const blankSession = () => ({state:blankState(),questions:{},order:[],results:{},setName:'',members:{},leaderboard:{}});
   const firebaseConfig = {
     apiKey: 'AIzaSyDUPGhkiJgxeYDYHqEaXCYvKh2vdTGqypw',
@@ -789,7 +817,8 @@
       revealProgress:1,revealAnimating:false,rankAnimationPhase:'after',rankOldRows:[],rankNewRows:[],
       rankShifts:{},animatingQuestionId:'',revealRaf:null,revealSerial:0,
       _initialResultsLoaded:false,_seenResults:{},pendingRank:[],
-      _currentQuestionAnswerReady:false, revealStage:'answer',rankCountProgress:1,_pendingRevealQid:'',_pendingRevealResult:null
+      _currentQuestionAnswerReady:false, revealStage:'answer',rankCountProgress:1,_pendingRevealQid:'',_pendingRevealResult:null,
+      _lastRankAnimationKey:'',autoAdvanceTimer:null
     }; },
     computed: {
       activeSets() { return Object.entries(this.sets).map(([id,x])=>({id,...x})).filter(s=>!s.archived).sort((a,b)=>(a.order||0)-(b.order||0)); },
@@ -821,9 +850,24 @@
         return this.rankAnimationPhase==='before'?this.rankOldRows:this.rankNewRows;
       },
       showLiveRank(){return this.phase==='revealed'||this.isReview;},
-      isRankScene(){return !this.fixedSessionId&&this.phase==='revealed'&&this.revealStage==='rank';},
-      projectionMainLabel(){if(!this.activeSessionId||this.session.state?.finishedAt)return '▶ 開始';if(this.canPublish)return '✦ 看結果';if(this.canNext)return '➜ 下一題';if(this.phase==='revealed')return '📚 開啟逐題回看';return '⏳ 等待操作';},
-      projectionMainDisabled(){if(this.working)return true;if(!this.activeSessionId||this.session.state?.finishedAt)return !this.selectedQuestions.length;if(this.canPublish||this.canNext)return false;if(this.phase==='revealed')return false;return true;},
+      rankRequestedAt(){return Number(this.session.state?.rankStartedAt)||0;},
+      isRankScene(){return !this.fixedSessionId&&this.phase==='revealed'&&!!this.rankRequestedAt;},
+      projectionMainLabel(){
+        if(!this.activeSessionId||this.session.state?.finishedAt)return '▶ 開始';
+        if(this.canPublish)return '✦ 看結果';
+        if(this.phase==='revealed'&&this.rankRequestedAt)return this.isLastQuestion?'📚 開啟逐題回看':'⏳ 排名展示後自動下一題';
+        if(this.canNext)return '➜ 下一題（先顯示排名）';
+        if(this.phase==='revealed')return '🏆 查看最終排名';
+        return '⏳ 等待操作';
+      },
+      projectionMainDisabled(){
+        if(this.working)return true;
+        if(!this.activeSessionId||this.session.state?.finishedAt)return !this.selectedQuestions.length;
+        if(this.phase==='revealed'&&this.rankRequestedAt&&!this.isLastQuestion)return true;
+        if(this.canPublish||this.canNext)return false;
+        if(this.phase==='revealed')return false;
+        return true;
+      },
       isLastQuestion(){return this.session.order?.length>0&&this.session.state.questionIndex===this.session.order.length-1;},
       displayedCorrectCount(){return this.countReveal(this.currentResult?.correctCount||0);},
       reviewIsCurrent(){return this.reviewSourceId===this.activeSessionId;} ,
@@ -854,7 +898,8 @@
     },
     watch: {
       selectedSetId(){this.setAnswerMode=this.sets[this.selectedSetId]?.answerMode||'quick';},
-      currentQuestionId() {this.stopRevealAnimation();this.selection=[];this.myAnswer=null;this.sending=false;this.answerStatus='idle';this.answerError='';this.failedPicks=[];this.answerScope='';this.jumpQuestionId=this.currentQuestionId;this.bindCurrentAnswer();},
+      currentQuestionId() {this.cancelRankAutoAdvance();this._lastRankAnimationKey='';this.stopRevealAnimation();this.selection=[];this.myAnswer=null;this.sending=false;this.answerStatus='idle';this.answerError='';this.failedPicks=[];this.answerScope='';this.jumpQuestionId=this.currentQuestionId;this.bindCurrentAnswer();this.$nextTick(()=>{if(this.$refs.projectionStage)this.$refs.projectionStage.scrollTop=0;});},
+      rankRequestedAt(ts){if(ts)this.$nextTick(()=>{this.tryStartRankingAnimation();this.scheduleRankAutoAdvance();});else{this.cancelRankAutoAdvance();this._lastRankAnimationKey='';}},
       projectId() {this.allSessionRows=[];this.allSessionsLoaded=false;this.$nextTick(()=>this.renderQR());},
       qrVisible(){this.$nextTick(()=>this.renderQR());}
     },
@@ -877,7 +922,7 @@
       this.subscribe(this.listenerGlobal,db.ref('.info/connected'),v=>{this.firebaseConnected=!!v;this.connectionKnown=true;});
       this.$nextTick(()=>this.renderQR());
     },
-    beforeUnmount(){this.stopRevealAnimation();this.clearListeners(this.listenerGlobal);this.clearListeners(this.listenerProject);this.clearListeners(this.listenerSession);this.clearAnswerListener();if(this.tickTimer)clearInterval(this.tickTimer);if(this.toastTimer)clearTimeout(this.toastTimer);},
+    beforeUnmount(){this.cancelRankAutoAdvance();this.stopRevealAnimation();this.clearListeners(this.listenerGlobal);this.clearListeners(this.listenerProject);this.clearListeners(this.listenerSession);this.clearAnswerListener();if(this.tickTimer)clearInterval(this.tickTimer);if(this.toastTimer)clearTimeout(this.toastTimer);},
     methods: {
       subscribe(collection,ref,fn){const handler=snap=>fn(snap.val(),snap);const error=e=>{this.errorMessage='雲端同步失敗：'+e.message;};ref.on('value',handler,error);collection.push(()=>ref.off('value',handler));},
       clearListeners(l){for(const f of l.splice(0))try{f();}catch(e){}},
@@ -899,13 +944,13 @@
         this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/questions`),v=>this.questions=v||{});
         this.$nextTick(()=>this.renderQR());
       },
-      bindSession(){this.stopRevealAnimation();this.clearListeners(this.listenerSession);this.clearAnswerListener();this.session=blankSession();this.selection=[];
+      bindSession(){this.cancelRankAutoAdvance();this._lastRankAnimationKey='';this.stopRevealAnimation();this.clearListeners(this.listenerSession);this.clearAnswerListener();this.session=blankSession();this.selection=[];
         this._initialResultsLoaded=false;this._seenResults={};this._pendingRevealQid='';this._pendingRevealResult=null;this.reviewMode=false;
         if(!this.activeSessionId)return;
         const base=`projects/${this.projectId}/sessions/${this.activeSessionId}`;
-        this.subscribe(this.listenerSession,refPath(base+'/state'),v=>{this.session.state=v||blankState();this.$nextTick(()=>{this.tryStartPendingReveal();this.settleExistingResult();});});
+        this.subscribe(this.listenerSession,refPath(base+'/state'),v=>{this.session.state=v||blankState();this.$nextTick(()=>{this.tryStartPendingReveal();this.tryStartRankingAnimation();this.scheduleRankAutoAdvance();this.settleExistingResult();});});
         this.subscribe(this.listenerSession,refPath(base+'/questions'),v=>this.session.questions=v||{});
-        this.subscribe(this.listenerSession,refPath(base+'/order'),v=>this.session.order=v||[]);
+        this.subscribe(this.listenerSession,refPath(base+'/order'),v=>{this.session.order=v||[];this.$nextTick(()=>this.scheduleRankAutoAdvance());});
         this.subscribe(this.listenerSession,refPath(base+'/setName'),v=>this.session.setName=v||'');
         this.subscribe(this.listenerSession,refPath(base+'/setId'),v=>{this.session.setId=v||'';if(this.session.setId&&this.sets[this.session.setId]&&!this.sets[this.session.setId].archived)this.selectedSetId=this.session.setId;});
         this.subscribe(this.listenerSession,refPath(base+'/answerMode'),v=>this.session.answerMode=v||'quick');
@@ -918,7 +963,7 @@
           }
           this._seenResults=Object.fromEntries(Object.keys(fresh).map(qid=>[qid,true]));
           this.session.results=fresh;
-          this._initialResultsLoaded=true;this.$nextTick(()=>{this.tryStartPendingReveal();this.settleExistingResult();});
+          this._initialResultsLoaded=true;this.$nextTick(()=>{this.tryStartPendingReveal();this.tryStartRankingAnimation();this.scheduleRankAutoAdvance();this.settleExistingResult();});
         });
         this.subscribe(this.listenerSession,refPath(base+'/leaderboard'),v=>{
           this.session.leaderboard=v||{};
@@ -1302,7 +1347,14 @@
         catch(e){this.showMessage('❌ 建立場次失敗：'+e.message);}finally{this.working=false;}
       },
       async changeState(mutator){if(!this.activeSessionId)return false;const r=refPath(`projects/${this.projectId}/sessions/${this.activeSessionId}/state`);try{const tx=await r.transaction(s=>{if(!s)return;return mutator(s);},undefined,false);return tx.committed;}catch(e){this.showMessage('❌ 無法變更課程狀態：'+e.message);return false;}},
-      projectionMainAction(){if(this.working||!this.hasAdminAccess||this.fixedSessionId)return;if(!this.activeSessionId||this.session.state?.finishedAt){this.startSession();return;}if(this.canPublish){this.publishResult();return;}if(this.canNext){this.nextQuestion();return;}if(this.phase==='revealed')this.openCurrentReviewDisplay();},
+      projectionMainAction(){
+        if(this.working||!this.hasAdminAccess||this.fixedSessionId)return;
+        if(!this.activeSessionId||this.session.state?.finishedAt){this.startSession();return;}
+        if(this.canPublish){this.publishResult();return;}
+        if(this.phase==='revealed'&&this.rankRequestedAt){if(this.isLastQuestion)this.openCurrentReviewDisplay();return;}
+        if(this.canNext){this.nextQuestion();return;}
+        if(this.phase==='revealed')this.showFinalRanking();
+      },
       openCurrentReviewDisplay(){if(!this.activeSessionId)return this.showMessage('目前還沒有場次可回看');this.stopRevealAnimation();this.inlineReviewMode=true;this.fixedSessionId=this.activeSessionId;this.historyIndex=0;this.qrVisible=false;this.showMessage('📖 已從第一題開始回看：使用上一題／下一題自由切換');},
       exitInlineReview(){if(!this.inlineReviewMode)return;this.inlineReviewMode=false;this.fixedSessionId='';this.historyIndex=0;const id=this.projectRuntime?.activeSessionId||'';if(id&&id!==this.activeSessionId){this.activeSessionId=id;this.bindSession();}else this.$nextTick(()=>{this.revealStage=this.currentResult?'rank':'answer';});},
       async openQuestion(){if(!this.canOpen||this.working)return;this.working=true;try{const duration=this.currentQuestion.duration||0;const opened=now()+this.serverOffset;const published=!!this.currentResult;if(published){this.showMessage('此題已公布過答案，為避免重複計分無法再次開放；請建立新場次。');return;}const ok=await this.changeState(s=>!s.finishedAt&&s.questionId===this.currentQuestionId&&!this.currentResult&&['waiting','closed'].includes(s.phase)?{...s,phase:'asking',openedAt:opened,deadlineAt:duration?opened+duration*1000:0,startedQuestions:{...(s.startedQuestions||{}),[this.currentQuestionId]:true}}:undefined);if(ok)this.showMessage('🟢 已開放本題作答');}finally{this.working=false;}},
@@ -1339,21 +1391,22 @@
           // 逐題保留排名快照，供課後逐題回顧（無動畫）及現場名次變動動畫使用。
           result.rankingBefore=snapshot.leaderboard||{};
           result.rankingAfter=board;
-          // 設為 true 可支援舊有檢視操作；新版「公布」後無論如何都自動顯示完整排行榜。
+          // 公布僅顯示正解及解析；排名快照已保存，但投影必須等講師按「下一題」才展示。
           const changes={};
           changes[`${ROOT}/${base}/results/${qid}`]=result;
           changes[`${ROOT}/${base}/leaderboard`]=board;
           changes[`${ROOT}/${base}/state/phase`]='revealed';
           changes[`${ROOT}/${base}/state/revealedAt`]=now()+this.serverOffset;
-          changes[`${ROOT}/${base}/state/showLeaderboard`]=true;
+          changes[`${ROOT}/${base}/state/showLeaderboard`]=false;
+          changes[`${ROOT}/${base}/state/rankStartedAt`]=0;
           const latest=(await refPath(base+'/state').once('value')).val();
           if(latest?.questionId!==qid||!['asking','closed'].includes(latest.phase))throw Error('題目狀態已變更，取消公布');
           if((await refPath(base+`/results/${qid}`).once('value')).exists())throw Error('另一個講師畫面已公布此題');
           await db.ref().update(changes);
-          this.showMessage('✅ 已公布本題結果，全班正確率排行榜同步更新');
+          this.showMessage('✅ 已公布正解及解析；按「下一題」才會顯示排名並切題');
         }catch(e){this.showMessage('❌ 公布結果失敗：'+e.message);}
       },
-      async switchQuestion(index){
+      async switchQuestion(index,expectedRankStartedAt=0,quiet=false){
         const qid=this.session.order[index];if(!qid||this.fixedSessionId)return false;
         const current=this.currentQuestionId;
         const q=this.session.questions?.[qid];if(!q)return false;
@@ -1361,16 +1414,47 @@
         const duration=q.duration||0;
         const ok=await this.changeState(state=>{
           if(state.questionId!==current || state.finishedAt || !this.session.results?.[current])return;
+          if(expectedRankStartedAt && Number(state.rankStartedAt)!==expectedRankStartedAt)return;
           if(index!==state.questionIndex+1)return;
           if(this.session.results?.[qid])return; // 已公布過的題目不可當作新題重測
           return {...state,questionIndex:index,questionId:qid,phase:'asking',openedAt:opened,
-            deadlineAt:duration?opened+duration*1000:0,
+            rankStartedAt:0,showLeaderboard:false,deadlineAt:duration?opened+duration*1000:0,
             startedQuestions:{...(state.startedQuestions||{}),[qid]:true}};
         });
         if(ok){this.showMessage('🟢 已進入第 '+(index+1)+' 題並開放作答');return true;}
-        this.showMessage('⚠️ 無法前往下一題，請確認上一題已公布');return false;
+        if(!quiet)this.showMessage('⚠️ 無法前往下一題，請確認上一題已公布');return false;
       },
-      nextQuestion(){if(!this.hasAdminAccess||!this.canNext||this.working)return;this.working=true;this.switchQuestion(this.session.state.questionIndex+1).finally(()=>this.working=false);},
+      // v1.9：按「下一題」只要求開始排名。實際切題在排名展示約 4.2 秒後自動完成。
+      nextQuestion(){if(!this.canNext||this.rankRequestedAt)return;return this.beginRankPresentation();},
+      showFinalRanking(){if(!this.isLastQuestion||this.rankRequestedAt)return;return this.beginRankPresentation();},
+      async beginRankPresentation(){
+        if(!this.hasAdminAccess||this.fixedSessionId||!this.currentResult||this.working||this.rankRequestedAt)return;
+        this.working=true;
+        try{
+          const qid=this.currentQuestionId,started=now()+this.serverOffset;
+          const ok=await this.changeState(s=>{
+            if(s.finishedAt||s.questionId!==qid||s.phase!=='revealed'||s.rankStartedAt||!this.session.results?.[qid])return;
+            return {...s,rankStartedAt:started,showLeaderboard:true};
+          });
+          if(ok){this.showMessage(this.isLastQuestion?'🏆 已顯示本場最終排名；按「逐題回看」可討論全部解析':'🏆 正在顯示排行榜；展示完成後自動進入下一題');
+            this.$nextTick(()=>{this.tryStartRankingAnimation();this.scheduleRankAutoAdvance();});
+          }else this.showMessage('⚠️ 排名可能已由其他講師畫面啟動，請查看投影');
+        }finally{this.working=false;}
+      },
+      cancelRankAutoAdvance(){if(this.autoAdvanceTimer!=null){clearTimeout(this.autoAdvanceTimer);this.autoAdvanceTimer=null;}},
+      scheduleRankAutoAdvance(){
+        this.cancelRankAutoAdvance();
+        const started=this.rankRequestedAt;
+        if(!started||!this.hasAdminAccess||this.fixedSessionId||!this.activeSessionId||!this.currentResult||this.isLastQuestion||!this.canNext)return;
+        const sid=this.activeSessionId,qid=this.currentQuestionId,index=this.session.state.questionIndex+1;
+        const waited=Math.max(0,now()+this.serverOffset-started);
+        this.autoAdvanceTimer=setTimeout(async()=>{
+          this.autoAdvanceTimer=null;
+          if(sid!==this.activeSessionId||qid!==this.currentQuestionId||this.rankRequestedAt!==started||this.fixedSessionId)return;
+          // 可由控制台與投影視窗同時排程，但 Firebase transaction 保證同一題只能切一次。
+          try{await this.switchQuestion(index,started,true);}catch(e){this.showMessage('⚠️ 自動切題失敗，請檢查連線後重新操作');}
+        },Math.max(0,RANK_DISPLAY_MS-waited));
+      },
       previousQuestion(){this.showMessage('請使用「逐題回看」瀏覽先前結果，不會改變目前出題進度。');},
       jumpQuestion(){this.showMessage('進行測驗時依順序出題；回顧時可自由跳至任一題。');},
       finishSession(){
@@ -1508,8 +1592,8 @@
         this.historyIndex=Math.min(Math.max(this.historyIndex+delta,0),(this.session.order||[]).length-1);
       },
       reviewDisplayJump(n){if(!this.fixedSessionId)return;const i=Number(n);if(Number.isInteger(i)&&i>=0&&i<(this.session.order||[]).length)this.historyIndex=i;},
-      settleExistingResult(){if(this.fixedSessionId||this.reviewMode||!['teacher','display'].includes(this.currentView))return;if(this.currentResult&&!this._pendingRevealQid&&!this.revealAnimating)this.revealStage='rank';},
-      tryStartPendingReveal(){const qid=this._pendingRevealQid;if(!qid||this.fixedSessionId||this.reviewMode||!['teacher','display'].includes(this.currentView))return;if(qid!==this.currentQuestionId)return;if(!this.session.results?.[qid])return;const r=this._pendingRevealResult||this.session.results[qid];this._pendingRevealQid='';this._pendingRevealResult=null;this.startRevealAnimation(qid,r,r.rankingBefore||{});},
+      settleExistingResult(){if(this.fixedSessionId||this.reviewMode||!['teacher','display'].includes(this.currentView))return;if(this.currentResult&&!this._pendingRevealQid&&!this.revealAnimating)this.revealStage=this.rankRequestedAt?'rank':'answer';},
+      tryStartPendingReveal(){const qid=this._pendingRevealQid;if(!qid||this.fixedSessionId||this.reviewMode||!['teacher','display'].includes(this.currentView))return;if(qid!==this.currentQuestionId)return;if(!this.session.results?.[qid])return;const r=this._pendingRevealResult||this.session.results[qid];this._pendingRevealQid='';this._pendingRevealResult=null;if(!this.rankRequestedAt)this.startRevealAnimation(qid,r,r.rankingBefore||{});},
       animatedRankValue(r,key){const actual=Number(r[key])||0;if(this.fixedSessionId||!this.revealAnimating||this.rankAnimationPhase==='before')return actual;if(this.rankAnimationPhase!=='after')return actual;const old=this.rankOldRows.find(x=>x.id===r.id);const original=Number(old?.[key])||0;const result=original+(actual-original)*this.rankCountProgress;return key==='accuracy'?result.toFixed(1):Math.round(result);},
       countReveal(n){
         const value=Number(n)||0;
@@ -1523,34 +1607,55 @@
         this.revealRaf=null;this.revealProgress=1;this.revealAnimating=false;
         this.animatingQuestionId='';this.revealStage='answer';this.rankCountProgress=1;this.rankAnimationPhase='after';this.rankOldRows=[];this.rankNewRows=[];this.rankShifts={};
       },
+      // 只跑正解/答對人數動畫，不再計時自動切換排行榜。
       startRevealAnimation(qid,result,boardBefore){
-        if(this.currentView==='student'||this.fixedSessionId||this.reviewMode)return;
+        if(this.currentView==='student'||this.fixedSessionId||this.reviewMode||this.rankRequestedAt)return;
         this.stopRevealAnimation();this.animatingQuestionId=qid;this.revealAnimating=true;
-        this.revealStage='answer';this.revealProgress=0;this.rankCountProgress=0;
-        this.rankAnimationPhase='before';
-        const prior=sortClassRanking(result.rankingBefore||boardBefore||{});
-        this.rankOldRows=prior;this.rankNewRows=sortClassRanking(result.rankingAfter||{});
-        const prev=Object.fromEntries(prior.map(r=>[r.id,r.rank]));
-        this.rankShifts=Object.fromEntries(this.rankNewRows.map(r=>[r.id,prev[r.id]===undefined?null:prev[r.id]-r.rank]));
+        this.revealStage='answer';this.revealProgress=0;this.rankCountProgress=1;
         const serial=this.revealSerial;
         const start=typeof performance!=='undefined'?performance.now():Date.now();
-        const prefersReduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if(prefersReduced){this.revealProgress=1;this.rankCountProgress=1;this.rankAnimationPhase='after';this.revealStage='rank';this.revealAnimating=false;return;}
-        const frame=(tm)=>{
-          if(serial!==this.revealSerial||this.currentQuestionId!==qid||this.reviewMode||this.fixedSessionId)return;
+        const reduce=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if(reduce){this.revealProgress=1;this.revealAnimating=false;return;}
+        const frame=tm=>{
+          if(serial!==this.revealSerial||this.currentQuestionId!==qid||this.fixedSessionId||this.rankRequestedAt)return;
           const ms=Math.max(0,(tm||performance.now())-start);
-          // 0–1450ms：正解高亮、錯誤變淡、答對人數從 0 向上加；之後切至全畫面排行。
           this.revealProgress=1-Math.pow(1-Math.min(1,ms/1450),3);
-          if(ms>=1450)this.revealStage='rank';
-          // 先短暫呈現上題名次，再以 FLIP 上下滑動切到新名次。
-          if(ms>=1950)this.rankAnimationPhase='after';
-          const move=Math.max(0,Math.min(1,(ms-1950)/1800));
-          this.rankCountProgress=1-Math.pow(1-move,3);
-          if(ms<4050)this.revealRaf=requestAnimationFrame(frame);
-          else {this.revealProgress=1;this.rankCountProgress=1;this.rankAnimationPhase='after';this.revealStage='rank';this.revealAnimating=false;this.revealRaf=null;}
+          if(ms<1450)this.revealRaf=requestAnimationFrame(frame);
+          else{this.revealProgress=1;this.revealAnimating=false;this.revealRaf=null;}
         };
         if(typeof requestAnimationFrame==='function')this.revealRaf=requestAnimationFrame(frame);
-        else{this.revealStage='rank';this.rankCountProgress=1;this.revealProgress=1;this.rankAnimationPhase='after';this.revealAnimating=false;}
+        else{this.revealProgress=1;this.revealAnimating=false;}
+      },
+      // 多個控制/投影視窗以 Firebase rankStartedAt 同步排名幕；直接重整仍可看到當前狀態。
+      tryStartRankingAnimation(){
+        if(this.fixedSessionId||this.reviewMode||!['teacher','display'].includes(this.currentView)||!this.currentResult||!this.rankRequestedAt)return;
+        const qid=this.currentQuestionId,key=`${this.activeSessionId}:${qid}:${this.rankRequestedAt}`;
+        if(this._lastRankAnimationKey===key)return;
+        this._lastRankAnimationKey=key;
+        this.stopRevealAnimation();this.animatingQuestionId=qid;this.revealStage='rank';
+        const prior=sortClassRanking(this.currentResult.rankingBefore||{});
+        this.rankOldRows=prior;
+        this.rankNewRows=sortClassRanking(this.currentResult.rankingAfter||this.session.leaderboard||{});
+        const prev=Object.fromEntries(prior.map(r=>[r.id,r.rank]));
+        this.rankShifts=Object.fromEntries(this.rankNewRows.map(r=>[r.id,prev[r.id]===undefined?null:prev[r.id]-r.rank]));
+        const elapsed=Math.max(0,now()+this.serverOffset-this.rankRequestedAt);
+        const reduce=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if(reduce||elapsed>=2750||typeof requestAnimationFrame!=='function'){
+          this.rankAnimationPhase='after';this.rankCountProgress=1;this.revealAnimating=false;return;
+        }
+        this.revealAnimating=true;this.rankAnimationPhase='before';this.rankCountProgress=0;
+        const serial=this.revealSerial;
+        const start=typeof performance!=='undefined'?performance.now()-elapsed:Date.now()-elapsed;
+        const frame=tm=>{
+          if(serial!==this.revealSerial||this.currentQuestionId!==qid||!this.rankRequestedAt||this.fixedSessionId)return;
+          const ms=Math.max(0,(tm||performance.now())-start);
+          this.rankAnimationPhase=ms<620?'before':'after';
+          const move=Math.max(0,Math.min(1,(ms-620)/1800));
+          this.rankCountProgress=1-Math.pow(1-move,3);
+          if(ms<2750)this.revealRaf=requestAnimationFrame(frame);
+          else{this.rankAnimationPhase='after';this.rankCountProgress=1;this.revealAnimating=false;this.revealRaf=null;}
+        };
+        this.revealRaf=requestAnimationFrame(frame);
       },
       prepareRankAnimation(board){
         if(!this.revealAnimating)return;
