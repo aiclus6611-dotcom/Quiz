@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v2.0｜投影自由跨題組回看與開場・保留原有測驗畫面</title>
+<title>課堂互動即時答題系統 v2.1｜自訂多個累計組・跨題組自由回看</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -315,6 +315,62 @@
 .proj-guide-panel .guide-close{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:8px;padding:7px 11px;cursor:pointer;color:#334155}
 .proj-guide-panel .guide-warning{background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:9px 10px;color:#9a3412;font-size:.85rem;line-height:1.5}
 @media(max-width:580px){.proj-guide-overlay{padding:0}.proj-guide-panel{width:100%;border-radius:0;padding:14px}.proj-fullscreen .showcase-tools .nav-toggle{padding:8px 10px}}
+
+/* === v2.1 多個自訂累計組：獨立浮層，不修改現有題目／選項／動畫排版 === */
+.proj-fullscreen .cumulative-toggle{background:#25466d;color:#fff;border-color:#7798bd;white-space:nowrap}
+.cumulative-layer{position:fixed;inset:0;z-index:565;background:#071226f2;color:#f8fafc;overflow-y:auto;overscroll-behavior:contain;padding:clamp(10px,1.7vw,24px);box-sizing:border-box}
+.cumulative-shell{max-width:1450px;min-height:calc(100dvh - 40px);margin:auto;display:flex;flex-direction:column;gap:13px}
+.cumulative-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.cumulative-head h2{font-size:clamp(1.4rem,2.5vw,2.8rem);margin:0;color:#fde68a}
+.cumulative-head p{margin:5px 0 0;color:#bad1ee;font-size:clamp(.83rem,1.2vw,1.1rem)}
+.cumulative-head .cumulative-close{background:#283e62;color:#fff;border:1px solid #7a93ba;padding:10px 15px;border-radius:10px;font-weight:800;cursor:pointer}
+.cumulative-tabs{display:flex;gap:9px;flex-wrap:wrap}
+.cumulative-tabs button{border:1px solid #6080a8;background:#1d3353;color:#dbeafe;border-radius:9px;padding:10px 16px;font-weight:900;cursor:pointer}
+.cumulative-tabs button.active{background:#fbbf24;color:#111827;border-color:#fde68a}
+.cumulative-controls{background:#172a4b;border:1px solid #48698e;border-radius:14px;padding:13px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.cumulative-controls label{font-weight:800}
+.cumulative-controls select{flex:1;min-width:min(250px,100%);max-width:100%;background:white;color:#0f172a;border-radius:8px;padding:11px;font-weight:800}
+.cumulative-action{border:1px solid #bfd3ed;background:#24446d;color:#fff;border-radius:9px;padding:11px 14px;font-weight:900;cursor:pointer}
+.cumulative-action:disabled{opacity:.5;cursor:not-allowed}
+.cumulative-action.gold{background:#fbbf24;border-color:#fde68a;color:#111827}
+.cumulative-action.red{background:#7f1d1d;border-color:#fca5a5}
+.cumulative-note{padding:10px 13px;background:#1c3b5c;border:1px solid #537caa;border-radius:11px;color:#deebff;line-height:1.65}
+.cumulative-warning{background:#50310c;border-color:#b45309;color:#ffedd5}
+.cumulative-board{flex:1;min-height:380px;background:linear-gradient(140deg,#1a335a,#0e1836);border:1px solid #5772a1;border-radius:22px;padding:clamp(13px,2vw,26px);display:flex;flex-direction:column;gap:10px}
+.cumulative-board-title{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-bottom:1px solid #ffffff35;padding-bottom:12px}
+.cumulative-board-title h3{margin:0;color:#fef08a;font-size:clamp(1.45rem,2.3vw,2.7rem)}
+.cumulative-board-title span{color:#c5d8f7;font-weight:800}
+.cumulative-rank-list{overflow-y:auto;max-height:calc(100dvh - 360px);min-height:150px;display:flex;flex-direction:column;gap:7px;padding:6px}
+.cumulative-rank-item{display:grid;grid-template-columns:clamp(44px,5vw,80px) minmax(0,1fr) auto;gap:10px;align-items:center;background:#243c5e;border:1px solid #5a76a2;border-radius:13px;padding:10px 15px;min-height:54px;font-size:clamp(1rem,1.75vw,1.65rem)}
+.cumulative-rank-item.first{background:#6b521e;border-color:#facc15}
+.cumulative-rank-item.second{background:#495466;border-color:#cbd5e1}
+.cumulative-rank-item.third{background:#664331;border-color:#fdba74}
+.cumulative-rank-item .place{font-size:1.4em;color:#fde68a;font-weight:1000;text-align:center}
+.cumulative-rank-item .nick{font-weight:900;min-width:0;overflow-wrap:anywhere}
+.cumulative-rank-item .stats{white-space:nowrap;color:#fef9c3;font-weight:900;text-align:right}
+.cumulative-rank-item .stats small{color:#dbeafe;font-size:.7em}
+.cumulative-groups{background:#f8fafc;color:#0f172a;border-radius:16px;padding:clamp(14px,2vw,24px);max-height:calc(100dvh - 180px);overflow-y:auto;scrollbar-color:#64748b #e2e8f0}
+.cumulative-groups h3{margin:10px 0;color:#0f172a}
+.cumulative-groups .cg-row{background:#fff;border:1px solid #cbd5e1;border-radius:11px;padding:12px;margin-bottom:9px}
+.cumulative-groups .cg-row.archived{background:#f1f5f9;opacity:.8}
+.cumulative-groups .cg-row strong{font-size:1.03rem}
+.cumulative-groups .cg-row p{font-size:.85rem;color:#475569;margin:5px 0}
+.cumulative-groups .cg-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}
+.cumulative-groups .cg-tools button{border:1px solid #93a6bf;background:#fff;color:#19365b;border-radius:7px;padding:8px 12px;cursor:pointer;font-weight:800}
+.cumulative-groups .cg-tools button:disabled{opacity:.5;cursor:not-allowed}
+.cumulative-groups .cg-tools button.archive{color:#9a3412;border-color:#fdba74}
+.cumulative-form{padding:17px;border:1px solid #bdd2ec;border-radius:13px;background:#fff;margin-top:12px}
+.cumulative-form label{color:#334155;font-weight:900;display:block;margin:12px 0 6px}
+.cumulative-form input[type=text],.cumulative-form select{width:100%;padding:10px;background:#fff;color:#0f172a;border:1px solid #a4b8d1;border-radius:8px;font:inherit;box-sizing:border-box}
+.cumulative-form .cg-choice{border:1px solid #d1dbe9;border-radius:9px;padding:10px;margin:8px 0;display:flex;gap:10px;align-items:center}
+.cumulative-form .cg-choice input{width:19px;height:19px;accent-color:#0369a1}
+.cumulative-form .cg-pick{background:#f1f5f9;border-radius:9px;padding:9px 12px;margin:7px 0;color:#0f172a}
+.cumulative-form .cg-pick label{font-size:.88rem;margin:0 0 6px}
+.cumulative-form .cg-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+.cumulative-form .cg-actions button{border:1px solid #0369a1;border-radius:9px;padding:11px 17px;font-weight:900;cursor:pointer;background:#0369a1;color:white}
+.cumulative-form .cg-actions button:disabled{opacity:.5;cursor:not-allowed}
+.cumulative-form .cg-actions button.cancel{background:white;color:#334155;border-color:#94a3b8}
+@media(max-width:650px){.cumulative-rank-list{max-height:calc(100dvh - 430px)}.cumulative-rank-item{grid-template-columns:38px minmax(0,1fr);gap:6px;padding:9px}.cumulative-rank-item .stats{grid-column:2;text-align:left;font-size:.84rem}.cumulative-controls{flex-direction:column;align-items:stretch}.cumulative-controls select{flex:initial;width:100%}}
 </style>
 </head>
 <body>
@@ -576,6 +632,7 @@
               <button v-if="!projectionIsReview && !isRankScene" class="rounded-action" @click="qrVisible=!qrVisible">{{qrVisible?'收合':'顯示'}} QR</button>
               <button v-if="projectionIsReview" class="rounded-action" @click="returnLiveProjection">↩ 返回現場</button>
               <button v-if="hasAdminAccess" class="rounded-action nav-toggle" type="button" :aria-expanded="navigationOpen" @click="toggleProjectionNavigation">📚 題組／回看</button>
+              <button v-if="hasAdminAccess" class="rounded-action cumulative-toggle" type="button" :aria-expanded="cumulativeOpen" @click="openCumulativePanel">🏆 累計排名</button>
               <button class="rounded-action" @click="toggleFullscreen">⛶ 全螢幕</button>
             </div>
           </header>
@@ -700,6 +757,11 @@
                 <button class="guide-action begin" type="button" :disabled="working||navigationWorking||!navigationCanStart" @click="prepareNavigationStart">▶ 開始此題組的新場次</button>
                 <p class="guide-status" v-if="!navigationCanStart">只有未封存、且至少有一題的題組可以開始新場次。</p>
               </div>
+              <div class="guide-section">
+                <h3>🏆 自訂多組累計排行榜</h3>
+                <div class="guide-help">可建立多個累計組，各自指定要合計的題組及場次；回看與累計排名都不會改動學員作答。</div>
+                <button class="guide-action" type="button" @click="openCumulativePanel">🏆 開啟累計排名與管理</button>
+              </div>
               <div class="guide-section" v-if="projectionIsReview">
                 <h3>↩ 回到現場</h3>
                 <div class="guide-help">目前只是投影端回看；學員端仍維持原本正在進行的場次。</div>
@@ -707,6 +769,98 @@
               </div>
             </aside>
           </div>
+
+        <!-- v2.1 累計組：純投影操作浮層，關閉後保留全部原有畫面、題號、排名與作答 -->
+        <div v-if="cumulativeOpen&&hasAdminAccess" class="cumulative-layer" role="dialog" aria-modal="true" aria-label="講師自訂累計排行榜" @keydown.esc.stop="cumulativeOpen=false">
+          <div class="cumulative-shell">
+            <div class="cumulative-head">
+              <div><h2>🏆 自訂累計排行榜</h2><p>多個獨立累計組 · 講師決定哪些題組一起計算 · 不改動原本題組排行榜</p></div>
+              <button type="button" class="cumulative-close" @click="cumulativeOpen=false">✕ 關閉，返回投影</button>
+            </div>
+            <div class="cumulative-tabs">
+              <button :class="{active:cumulativeTab==='ranking'}" @click="cumulativeTab='ranking'">🏆 查看累計排名</button>
+              <button :class="{active:cumulativeTab==='manage'}" @click="cumulativeTab='manage'">⚙ 管理累計組</button>
+            </div>
+            <template v-if="cumulativeTab==='ranking'">
+              <div class="cumulative-controls">
+                <label for="cum-group-list">選擇累計組</label>
+                <select id="cum-group-list" v-model="cumulativeChosenId">
+                  <option v-if="!cumulativeActiveGroups.length" value="">尚未建立累計組</option>
+                  <option v-for="g in cumulativeActiveGroups" :key="g.id" :value="g.id">{{g.name}}（{{g.setIds?.length||0}} 個題組）</option>
+                </select>
+                <button class="cumulative-action" :disabled="cumulativeLoading" @click="refreshCumulativeSessions">↻ 更新計分資料</button>
+                <button class="cumulative-action gold" @click="beginCumulativeCreate">＋ 建立累計組</button>
+              </div>
+              <div v-if="cumulativeError" class="cumulative-note cumulative-warning" role="alert">⚠ {{cumulativeError}}</div>
+              <div class="cumulative-note" v-if="cumulativeLoadedAt">以最新讀取的已公布題目計算 · 資料讀取時間：{{new Date(cumulativeLoadedAt).toLocaleString('zh-TW')}}。學員仍在答題時，可按「更新計分資料」取得新的排名。</div>
+              <div v-if="!cumulativeActiveGroups.length" class="cumulative-board"><h3>目前沒有累計組</h3><p>先按「＋ 建立累計組」，勾選例如第 1、2、3 題組並命名。您還能另外建立 4＋5、7＋8＋9 等其他累計組。</p></div>
+              <div v-else-if="cumulativeLoading&&!cumulativeLoadedAt" class="cumulative-board">⏳ 正在讀取課堂紀錄與成績…</div>
+              <div v-else-if="cumulativeChosenGroup" class="cumulative-board">
+                <div class="cumulative-board-title">
+                  <div><h3>🏆 {{cumulativeChosenGroup.name}}</h3><span>{{cumulativeBoard.sources.length}} / {{cumulativeChosenGroup.setIds.length}} 個題組已有場次 · 已公布計分題 {{cumulativeBoard.graded}} 題 · {{cumulativeBoard.rows.length}} 位學員</span></div>
+                  <span>累計正確率 / 答對題數</span>
+                </div>
+                <div class="cumulative-note" style="font-size:.88rem">
+                  <div v-for="entry in cumulativeBoard.sources" :key="entry.setId">📘 {{entry.setName}}：{{entry.graded}} 題計分，採用 {{entry.sessionLabel}}</div>
+                  <div v-for="entry in cumulativeBoard.missing" :key="entry.setId" style="color:#fcd34d">⏳ {{entry.setName}}：{{entry.reason}}，尚未納入分母</div>
+                  <div>規則：每個題組只取一場，跨題組以同一學員 ID 合計；僅公布且有標準答案的題目計分，未作答算錯；意見投票不計入正確率。</div>
+                </div>
+                <div class="cumulative-rank-list" v-if="cumulativeBoard.rows.length" aria-label="累計組學員排名">
+                  <div v-for="r in cumulativeBoard.rows" :key="r.id" class="cumulative-rank-item" :class="{first:r.rank===1,second:r.rank===2,third:r.rank===3}">
+                    <b class="place">{{r.rank}}</b>
+                    <span class="nick">{{r.rank===1?'👑 ':r.rank===2?'🥈 ':r.rank===3?'🥉 ':''}}{{r.nickname}}</span>
+                    <span class="stats">答對 {{r.correct}} / {{r.graded}} 題　<small>正確率</small> {{r.accuracy}}%</span>
+                  </div>
+                </div>
+                <div v-else class="cumulative-note">這個累計組目前沒有可排名的學員。完成題組測驗並公布結果後，再更新計分資料即可查看。</div>
+              </div>
+            </template>
+            <section v-else class="cumulative-groups" aria-label="管理自訂累計組">
+              <h3>⚙ 累計組管理</h3>
+              <p style="line-height:1.6">每個累計組都有獨立名稱、題組清單與採用的歷史場次。不同組可以包含相同題組；同一題組重測時只選一場，絕不重複累計。封存可恢復，歷史答案不會被更動。</p>
+              <button class="cumulative-action gold" @click="beginCumulativeCreate">＋ 建立新的累計組</button>
+              <div v-for="g in cumulativeAllGroups" :key="g.id" class="cg-row" :class="{archived:g.archived}">
+                <strong>{{g.name}} {{g.archived?'（已封存）':''}}</strong>
+                <p>📚 {{(g.setIds||[]).map(id=>sets[id]?.name||'題組已不存在').join(' ＋ ')||'尚未選題組'}}</p>
+                <div class="cg-tools">
+                  <button v-if="!g.archived" :disabled="cumulativeSaving" @click="cumulativeChosenId=g.id;cumulativeTab='ranking'">🏆 查看排名</button>
+                  <button v-if="!g.archived" :disabled="cumulativeSaving" @click="beginCumulativeEdit(g)">✏️ 編輯</button>
+                  <button :disabled="cumulativeSaving" @click="prepareCumulativeRollback(g)">↶ 還原前一版設定</button>
+                  <button v-if="!g.archived" class="archive" :disabled="cumulativeSaving" @click="confirmCumulativeArchive(g,false)">📦 封存</button>
+                  <button v-else :disabled="cumulativeSaving" @click="confirmCumulativeArchive(g,true)">↶ 還原</button>
+                </div>
+              </div>
+              <div v-if="!cumulativeAllGroups.length" class="cumulative-note" style="color:#1e293b;background:#e0f2fe">尚無累計組。您可以建立「第一～三題組總排名」、「第四～五題組總排名」等，數量不限。</div>
+              <div v-if="cumulativeEditorVisible" class="cumulative-form" id="cumulative-editor">
+                <h3>{{cumulativeEditingId?'✏️ 編輯累計組':'＋ 建立累計組'}}</h3>
+                <label for="cg-name">累計組名稱</label>
+                <input id="cg-name" type="text" v-model.trim="cumulativeEditorName" maxlength="60" placeholder="例：第一階段（題組 1＋2＋3）">
+                <label>請勾選要合計的題組（可多選）</label>
+                <div v-for="st in cumulativeSetChoices" :key="st.id" class="cg-choice">
+                  <input type="checkbox" :id="'cum-'+st.id" :checked="cumulativeEditorSetIds.includes(st.id)" @change="toggleCumulativeEditorSet(st.id,$event.target.checked)">
+                  <label :for="'cum-'+st.id" style="margin:0;flex:1;cursor:pointer">{{st.name}}{{st.archived?'（已封存）':''}}</label>
+                </div>
+                <div v-if="!cumulativeSetChoices.length">尚無題組，請先在講師管理頁建立題組。</div>
+                <div v-if="cumulativeEditorSetIds.length" style="margin-top:14px">
+                  <h3>每個題組採用哪一場？</h3>
+                  <p style="font-size:.88rem;color:#475569">預設自動取「最近一場」。如果某題組重測過，可以指定一場歷史測驗，確保同一題組不會重複計分。</p>
+                  <div v-for="sid in cumulativeEditorSetIds" :key="sid" class="cg-pick">
+                    <label :for="'pick-'+sid">{{sets[sid]?.name||'已不存在的題組'}}</label>
+                    <select :id="'pick-'+sid" :value="cumulativeEditorSessionPick[sid]||'latest'" @change="setCumulativeSessionChoice(sid,$event.target.value)">
+                      <option value="latest">自動採用最近一場（每個題組只取一場）</option>
+                      <option v-for="h in cumulativeSessionSummariesForSet(sid)" :key="h.id" :value="h.id">{{new Date(h.createdAt).toLocaleString('zh-TW')}} · 已公布 {{h.published}} 題 · {{h.id.slice(-8)}}</option>
+                      <option v-if="cumulativeEditorSessionPick[sid]&&cumulativeEditorSessionPick[sid]!=='latest'&&!cumulativeSessionSummariesForSet(sid).some(h=>h.id===cumulativeEditorSessionPick[sid])" :value="cumulativeEditorSessionPick[sid]">⚠ 原指定場次不存在，請重新選擇</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="cg-actions">
+                  <button :disabled="cumulativeSaving||!cumulativeEditorName||!cumulativeEditorSetIds.length" @click="saveCumulativeGroup">{{cumulativeSaving?'正在儲存…':'💾 儲存累計組'}}</button>
+                  <button class="cancel" type="button" :disabled="cumulativeSaving" @click="cumulativeEditorVisible=false">取消</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
         </div>
 
         <!-- 學生端極簡：加入後只留題號和 2×2 顏色／位置固定的選項鍵，無題幹、答案、排行榜 -->
@@ -810,6 +964,47 @@
     rows.forEach((r,i)=>{const key=`${r.correct}-${r.score}`;if(key!==previous){rank=i+1;previous=key;}r.rank=rank;});
     return rows;
   }
+  // v2.1：累計組只讀計算。同一題組只採一個場次；學員以專案內穩定 ID 合併，絕不靠暱稱合併。
+  function computeCumulativeGroup(group, sessions, sets){
+    const sourceSets=[...new Set(Array.isArray(group?.setIds)?group.setIds:[])].filter(id=>typeof id==='string'&&id);
+    const all=Object.entries(sessions||{}).filter(([,v])=>v&&Array.isArray(v.order)&&v.setId);
+    const board={},sources=[],missing=[];
+    let totalGraded=0;
+    for(const setId of sourceSets){
+      const setName=sets?.[setId]?.name||'已移除的題組（'+setId.slice(-8)+'）';
+      const candidates=all.filter(([,v])=>v.setId===setId).sort((a,b)=>(Number(b[1].createdAt)||0)-(Number(a[1].createdAt)||0)||b[0].localeCompare(a[0]));
+      const wanted=group?.sessionPickBySet?.[setId]||'latest';
+      const chosen=wanted==='latest'?candidates[0]:candidates.find(([id])=>id===wanted);
+      if(!chosen){missing.push({setId,setName,reason:wanted==='latest'?'尚未有測驗場次':'指定歷史場次不存在'});continue;}
+      const [sessionId,session]=chosen;
+      const gradedIds=Object.keys(session.results||{}).filter(qid=>session.questions?.[qid]&&session.questions[qid].type!=='poll');
+      totalGraded+=gradedIds.length;
+      sources.push({setId,setName,sessionId,graded:gradedIds.length,sessionLabel:new Date(Number(session.createdAt)||0).toLocaleString('zh-TW')+'（'+sessionId.slice(-8)+'）'});
+      const memberIds=new Set(Object.keys(session.members||{}));
+      for(const qid of gradedIds)for(const id of Object.keys(session.answers?.[qid]||{}))memberIds.add(id);
+      for(const id of memberIds){
+        const member=session.members?.[id]||{},old=board[id]||{
+          nickname:'學員',nickTime:-1,correct:0,answered:0,graded:0,pollAnswered:0,score:0,accuracy:0};
+        if((Number(session.createdAt)||0)>=old.nickTime&&member.nickname){old.nickname=member.nickname;old.nickTime=Number(session.createdAt)||0;}
+        for(const qid of gradedIds){
+          const picks=session.answers?.[qid]?.[id]?.picks;
+          if(!Array.isArray(picks)||!picks.length)continue;
+          old.answered++;
+          const expected=session.questions[qid].correct||[];
+          if(expected.length===picks.length&&expected.every(choice=>picks.includes(choice)))old.correct++;
+        }
+        board[id]=old;
+      }
+    }
+    for(const record of Object.values(board)){
+      record.graded=totalGraded;
+      record.score=record.correct*100;
+      record.accuracy=totalGraded?Math.round(record.correct/totalGraded*1000)/10:0;
+      delete record.nickTime;
+    }
+    return {rows:sortClassRanking(board),sources,missing,graded:totalGraded};
+  }
+
   const RANK_DISPLAY_MS = 4200; // 手動按下一題後，排名動畫展示時間；非最後一題結束後自動出新題。
   const blankState = () => ({questionId:'',questionIndex:0,phase:'waiting',openedAt:0,deadlineAt:0,showLeaderboard:false,rankStartedAt:0});
   const blankSession = () => ({state:blankState(),questions:{},order:[],results:{},setName:'',members:{},leaderboard:{}});
@@ -889,7 +1084,12 @@
       // v2.0：獨立於現場 session 的唯讀投影回看，切換回看不碰 runtime
       navigationOpen:false,navigationLoading:false,navigationWorking:false,navigationLoaded:false,navigationError:'',
       navigationSessions:[],navigationSetId:'',navigationSessionId:'',navigationTargetIndex:0,
-      navigationReviewId:'',navigationReviewRecord:null,navigationReviewIndex:0
+      navigationReviewId:'',navigationReviewRecord:null,navigationReviewIndex:0,
+      // v2.1：累計組設定與只讀成績快照獨立於測驗進度
+      cumulativeGroups:{},cumulativeOpen:false,cumulativeTab:'ranking',cumulativeChosenId:'',
+      cumulativeSessionsData:{},cumulativeLoadedAt:0,cumulativeLoading:false,cumulativeError:'',
+      cumulativeEditorVisible:false,cumulativeEditingId:'',cumulativeEditingVersion:0,
+      cumulativeEditorName:'',cumulativeEditorSetIds:[],cumulativeEditorSessionPick:{},cumulativeSaving:false
     }; },
     computed: {
       activeSets() { return Object.entries(this.sets).map(([id,x])=>({id,...x})).filter(s=>!s.archived).sort((a,b)=>(a.order||0)-(b.order||0)); },
@@ -923,6 +1123,11 @@
       navigationSelectedSession(){return this.navigationFilteredSessions.find(h=>h.id===this.navigationSessionId)||null;},
       navigationQuestionNumbers(){return Array.from({length:this.navigationSelectedSession?.count||0},(_,i)=>i+1);},
       navigationCanStart(){return this.activeSets.some(s=>s.id===this.navigationSetId)&&this.questionCount(this.navigationSetId)>0;},
+      cumulativeAllGroups(){return Object.entries(this.cumulativeGroups||{}).map(([id,v])=>({id,...v})).sort((a,b)=>(Number(a.createdAt)||0)-(Number(b.createdAt)||0)||a.id.localeCompare(b.id));},
+      cumulativeActiveGroups(){return this.cumulativeAllGroups.filter(g=>!g.archived);},
+      cumulativeChosenGroup(){return this.cumulativeActiveGroups.find(g=>g.id===this.cumulativeChosenId)||null;},
+      cumulativeSetChoices(){return Object.entries(this.sets||{}).map(([id,v])=>({id,...v})).sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||a.id.localeCompare(b.id));},
+      cumulativeBoard(){return computeCumulativeGroup(this.cumulativeChosenGroup,this.cumulativeSessionsData,this.sets);},
       localFileWarning(){return ['file:','content:'].includes(location.protocol);},
       selectedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&!q.archived).sort((a,b)=>(a.order||0)-(b.order||0));},
       archivedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&q.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));},
@@ -1040,6 +1245,10 @@
       attachTeacher(){if(this._teacherAttached||!this.projectId)return;this._teacherAttached=true;
         this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/sets`),v=>{this.sets=v||{};if(!this.sets[this.selectedSetId]||this.sets[this.selectedSetId]?.archived)this.selectedSetId=(this.session.setId&&this.sets[this.session.setId]&&!this.sets[this.session.setId]?.archived?this.session.setId:(this.activeSets[0]?.id||''));});
         this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/questions`),v=>this.questions=v||{});
+        this.subscribe(this.listenerProject,refPath(`projects/${this.projectId}/cumulativeGroups`),v=>{
+          this.cumulativeGroups=v||{};
+          if(!this.cumulativeActiveGroups.some(g=>g.id===this.cumulativeChosenId))this.cumulativeChosenId=this.cumulativeActiveGroups[0]?.id||'';
+        });
         this.$nextTick(()=>this.renderQR());
       },
       bindSession(){this.cancelRankAutoAdvance();this._lastRankAnimationKey='';this.stopRevealAnimation();this.clearListeners(this.listenerSession);this.clearAnswerListener();this.session=blankSession();this.selection=[];
@@ -1081,6 +1290,150 @@
       getLink(id,role){const url=new URL(location.href);url.searchParams.set('project',id||this.projectId);if(role==='student')url.searchParams.delete('role');else url.searchParams.set('role',role);url.searchParams.delete('poll');url.searchParams.delete('history');return url.href;},
       async copyLink(id,role){try{const value=this.getLink(id,role);if(navigator.clipboard&&location.protocol!=='file:')await navigator.clipboard.writeText(value);else{const n=document.createElement('textarea');n.value=value;document.body.appendChild(n);n.select();document.execCommand('copy');n.remove();}this.showMessage('✅ 已複製連結');}catch(e){prompt('請手動複製連結',this.getLink(id,role));}},
       renderQR(){if(typeof QRCode==='undefined')return;const el=this.currentView==='teacher'?this.$refs.teacherQr:this.currentView==='display'?this.$refs.displayQr:null;if(!el||!this.projectId)return;el.innerHTML='';new QRCode(el,{text:this.getLink(this.projectId,'student'),width:240,height:240,colorDark:'#0f172a',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});},
+
+      // ===== v2.1：獨立多組累計排行榜；檢視完全唯讀，設定可封存／還原 =====
+      openCumulativePanel(){
+        if(this.currentView!=='display'||!this.hasAdminAccess)return;
+        this.navigationOpen=false;this.attachTeacher();this.cumulativeOpen=true;
+        this.cumulativeTab=this.cumulativeActiveGroups.length?'ranking':'manage';
+        if(!this.cumulativeChosenId)this.cumulativeChosenId=this.cumulativeActiveGroups[0]?.id||'';
+        // 每次開啟都重新讀取，避免回看時展示過期的排行榜。
+        this.refreshCumulativeSessions();
+      },
+      async refreshCumulativeSessions(){
+        if(this.cumulativeLoading||!this.hasAdminAccess||!this.projectId)return;
+        this.cumulativeLoading=true;this.cumulativeError='';
+        try{
+          const snap=await refPath(`projects/${this.projectId}/sessions`).once('value');
+          this.cumulativeSessionsData=snap.val()||{};
+          this.cumulativeLoadedAt=now();
+        }catch(e){this.cumulativeError='讀取累計成績失敗：'+e.message;this.cumulativeLoadedAt=0;this.cumulativeSessionsData={};}
+        finally{this.cumulativeLoading=false;}
+      },
+      cumulativeSessionSummariesForSet(setId){
+        return Object.entries(this.cumulativeSessionsData||{}).filter(([,s])=>s&&s.setId===setId&&Array.isArray(s.order))
+          .map(([id,s])=>({id,createdAt:Number(s.createdAt)||0,published:Object.keys(s.results||{}).length}))
+          .sort((a,b)=>b.createdAt-a.createdAt||b.id.localeCompare(a.id));
+      },
+      beginCumulativeCreate(){
+        this.cumulativeTab='manage';this.cumulativeEditorVisible=true;
+        this.cumulativeEditingId='';this.cumulativeEditingVersion=0;
+        this.cumulativeEditorName='';this.cumulativeEditorSetIds=[];this.cumulativeEditorSessionPick={};
+        this.$nextTick(()=>document.getElementById('cumulative-editor')?.scrollIntoView({block:'nearest',behavior:'smooth'}));
+      },
+      beginCumulativeEdit(group){
+        if(!group||group.archived)return;
+        this.cumulativeTab='manage';this.cumulativeEditorVisible=true;
+        this.cumulativeEditingId=group.id;this.cumulativeEditingVersion=Number(group.updatedAt)||0;
+        this.cumulativeEditorName=group.name||'';
+        this.cumulativeEditorSetIds=[...(group.setIds||[])];
+        this.cumulativeEditorSessionPick={...(group.sessionPickBySet||{})};
+        this.$nextTick(()=>document.getElementById('cumulative-editor')?.scrollIntoView({block:'nearest',behavior:'smooth'}));
+      },
+      toggleCumulativeEditorSet(id,enabled){
+        if(enabled){if(!this.cumulativeEditorSetIds.includes(id))this.cumulativeEditorSetIds.push(id);}
+        else this.cumulativeEditorSetIds=this.cumulativeEditorSetIds.filter(x=>x!==id);
+      },
+      setCumulativeSessionChoice(id,value){this.cumulativeEditorSessionPick={...this.cumulativeEditorSessionPick,[id]:value};},
+      async saveCumulativeGroup(){
+        if(!this.hasAdminAccess||this.cumulativeSaving||!this.projectId)return;
+        const groupName=this.cumulativeEditorName.trim(),setIds=[...new Set(this.cumulativeEditorSetIds)];
+        if(!groupName||groupName.length>60||!setIds.length)return this.showMessage('❌ 請填寫名稱並至少選一個題組');
+        if(setIds.some(id=>!this.sets[id]))return this.showMessage('❌ 存在已移除的題組，請重選');
+        if(this.cumulativeActiveGroups.some(g=>g.id!==this.cumulativeEditingId&&g.name.trim()===groupName))return this.showMessage('❌ 已有同名累計組，請取不同名稱');
+        const pick={};for(const setId of setIds){
+          const choice=this.cumulativeEditorSessionPick[setId]||'latest';
+          if(choice!=='latest'&&!this.cumulativeSessionSummariesForSet(setId).some(x=>x.id===choice))return this.showMessage('❌ 有指定的歷史場次已不存在，請更新清單或選最近一場');
+          pick[setId]=choice;
+        }
+        this.cumulativeSaving=true;
+        try{
+          const id=this.cumulativeEditingId||refPath(`projects/${this.projectId}/cumulativeGroups`).push().key;
+          const base=`projects/${this.projectId}`,ref=refPath(`${base}/cumulativeGroups/${id}`);
+          const old=(await ref.once('value')).val();
+          if(this.cumulativeEditingId){
+            if(!old||old.archived||Number(old.updatedAt||0)!==this.cumulativeEditingVersion)throw Error('此累計組已被別的視窗更新，請重新載入後再編輯');
+          }else if(old)throw Error('累計組 ID 已存在，為保護舊資料已停止');
+          const stamp=now(),next={name:groupName,setIds,sessionPickBySet:pick,archived:false,
+            createdAt:Number(old?.createdAt)||stamp,updatedAt:stamp};
+          const backupId=refPath(`${base}/backups`).push().key;
+          const update={};
+          update[`${ROOT}/${base}/backups/${backupId}`]={action:'before_save_cumulative_group',path:`${base}/cumulativeGroups/${id}`,groupId:id,old:old||null,newRecord:clone(next),savedAt:stamp};
+          update[`${ROOT}/${base}/cumulativeGroups/${id}`]=next;
+          // 同一原子更新中先留 checkpoint，失敗時不改寫原有設定。
+          await db.ref().update(update);
+          this.cumulativeGroups={...this.cumulativeGroups,[id]:next};
+          this.cumulativeChosenId=id;this.cumulativeEditorVisible=false;this.cumulativeTab='ranking';
+          this.showMessage('✅ 已安全儲存「'+groupName+'」，可獨立查看累計排名');
+        }catch(e){this.showMessage('❌ 儲存累計組失敗：'+e.message);}
+        finally{this.cumulativeSaving=false;}
+      },
+      async prepareCumulativeRollback(group){
+        if(!this.hasAdminAccess||this.cumulativeSaving||!group)return;
+        try{
+          const snap=await refPath(`projects/${this.projectId}/backups`).once('value');
+          const entries=Object.entries(snap.val()||{}).filter(([,b])=>
+            b?.groupId===group.id&&b.path===`projects/${this.projectId}/cumulativeGroups/${group.id}`&&
+            b.old&&typeof b.old==='object'&&['before_save_cumulative_group','before_archive_cumulative_group',
+              'before_restore_cumulative_group','before_rollback_cumulative_group'].includes(b.action))
+            .sort((a,b)=>(Number(b[1].savedAt)||0)-(Number(a[1].savedAt)||0)||b[0].localeCompare(a[0]));
+          if(!entries.length)return this.showMessage('此累計組尚無可還原的前一版；首次建立後可用「封存」保留設定。');
+          const [backupId,backup]=entries[0];
+          this.askConfirm('是否將「'+group.name+'」還原至上一個設定版本「'+(backup.old.name||'未命名')+'」？\n原有場次、學員、答案與排行榜都不受影響；還原前也會再保留目前設定備份。',()=>this.rollbackCumulativeGroup(group.id,backupId));
+        }catch(e){this.showMessage('❌ 查詢設定備份失敗：'+e.message);}
+      },
+      async rollbackCumulativeGroup(id,backupId){
+        if(!this.hasAdminAccess||this.cumulativeSaving)return;
+        this.cumulativeSaving=true;
+        try{
+          const base=`projects/${this.projectId}`;
+          const record=(await refPath(`${base}/backups/${backupId}`).once('value')).val();
+          if(record?.groupId!==id||record?.path!==`${base}/cumulativeGroups/${id}`||!record?.old||
+            !['before_save_cumulative_group','before_archive_cumulative_group','before_restore_cumulative_group',
+              'before_rollback_cumulative_group'].includes(record.action))throw Error('找不到合法的設定備份');
+          const ref=refPath(`${base}/cumulativeGroups/${id}`),current=(await ref.once('value')).val();
+          if(!current)throw Error('累計組已不存在，無法安全還原');
+          const stamp=now(),restored={...clone(record.old),updatedAt:stamp};
+          const cp=refPath(`${base}/backups`).push().key;
+          const patch={};
+          patch[`${ROOT}/${base}/backups/${cp}`]={action:'before_rollback_cumulative_group',groupId:id,
+            path:`${base}/cumulativeGroups/${id}`,old:clone(current),restoredFrom:backupId,savedAt:stamp};
+          patch[`${ROOT}/${base}/cumulativeGroups/${id}`]=restored;
+          await db.ref().update(patch);
+          this.cumulativeGroups={...this.cumulativeGroups,[id]:restored};
+          if(restored.archived&&this.cumulativeChosenId===id)this.cumulativeChosenId=this.cumulativeActiveGroups[0]?.id||'';
+          this.cumulativeEditorVisible=false;
+          this.showMessage('✅ 已還原上一版設定；目前版本也已另存備份');
+        }catch(e){this.showMessage('❌ 還原設定失敗：'+e.message);}
+        finally{this.cumulativeSaving=false;}
+      },
+      confirmCumulativeArchive(group,restore){
+        if(!group||!this.hasAdminAccess)return;
+        const message=restore?'要還原累計組「'+group.name+'」嗎？原本的題組與場次設定都會恢復。':
+          '要封存累計組「'+group.name+'」嗎？只隱藏此累計組，不刪除題目、場次、學員、答題或排行榜；也可隨時還原。';
+        this.askConfirm(message,()=>this.setCumulativeArchive(group.id,!!restore));
+      },
+      async setCumulativeArchive(id,restore){
+        if(!this.hasAdminAccess||this.cumulativeSaving)return;
+        this.cumulativeSaving=true;
+        try{
+          const base=`projects/${this.projectId}`,ref=refPath(`${base}/cumulativeGroups/${id}`);
+          const old=(await ref.once('value')).val();
+          if(!old)throw Error('累計組不存在，沒有任何資料被變更');
+          if(Boolean(old.archived)===!restore){this.showMessage('狀態已是最新，無須重複操作');return;}
+          const stamp=now(),backupId=refPath(`${base}/backups`).push().key;
+          const update={};
+          update[`${ROOT}/${base}/backups/${backupId}`]={action:restore?'before_restore_cumulative_group':'before_archive_cumulative_group',
+            path:`${base}/cumulativeGroups/${id}`,groupId:id,old:clone(old),savedAt:stamp};
+          update[`${ROOT}/${base}/cumulativeGroups/${id}/archived`]=!restore;
+          update[`${ROOT}/${base}/cumulativeGroups/${id}/updatedAt`]=stamp;
+          await db.ref().update(update);
+          this.cumulativeGroups={...this.cumulativeGroups,[id]:{...old,archived:!restore,updatedAt:stamp}};
+          if(!restore&&this.cumulativeChosenId===id)this.cumulativeChosenId=this.cumulativeActiveGroups[0]?.id||'';
+          this.showMessage(restore?'✅ 累計組已還原':'✅ 累計組已封存，原有成績完整保留');
+        }catch(e){this.showMessage('❌ 操作失敗：'+e.message);}
+        finally{this.cumulativeSaving=false;}
+      },
 
       // ===== v2.0：關閉時不佔投影版面；只讀回看與正式切換有獨立操作 =====
       toggleProjectionNavigation(){
