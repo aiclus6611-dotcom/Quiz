@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v2.1｜自訂多個累計組・跨題組自由回看</title>
+<title>課堂互動即時答題系統 v2.2｜後台累計組設定・投影簡化雙區切換</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -371,6 +371,23 @@
 .cumulative-form .cg-actions button:disabled{opacity:.5;cursor:not-allowed}
 .cumulative-form .cg-actions button.cancel{background:white;color:#334155;border-color:#94a3b8}
 @media(max-width:650px){.cumulative-rank-list{max-height:calc(100dvh - 430px)}.cumulative-rank-item{grid-template-columns:38px minmax(0,1fr);gap:6px;padding:9px}.cumulative-rank-item .stats{grid-column:2;text-align:left;font-size:.84rem}.cumulative-controls{flex-direction:column;align-items:stretch}.cumulative-controls select{flex:initial;width:100%}}
+
+/* === v2.2：累計組設定只在講師後台；投影上的名次畫面沿用 v2.1 === */
+.teacher-cumulative-panel details > summary{cursor:pointer;font-size:1.25rem;font-weight:900;color:#0f172a;line-height:1.55;list-style-position:inside}
+.teacher-cumulative-panel .cumulative-groups{max-height:none;overflow:visible;background:transparent;padding:14px 0 0;color:#0f172a}
+.teacher-cumulative-panel .cumulative-groups .cg-row{box-shadow:none}
+.teacher-cumulative-panel .cumulative-action.gold{background:#fbbf24;color:#111827}
+.teacher-cumulative-panel .cumulative-form{background:#f8fafc}
+.teacher-cumulative-panel .cumulative-form .cg-choice{background:#fff}
+.teacher-cumulative-panel .cumulative-form .cg-pick{background:#e8eff8}
+.teacher-cumulative-panel .cumulative-note{background:#eef6ff;color:#17406c;border-color:#b9d2ef}
+.teacher-cumulative-panel .teacher-cg-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:13px 0}
+.teacher-cumulative-panel .teacher-cg-toolbar button{border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;border:1px solid #b4c6de}
+.teacher-cumulative-panel .teacher-cg-toolbar button:disabled{opacity:.5;cursor:not-allowed}
+.proj-guide-panel .guide-section h3{margin:0 0 9px}
+.proj-guide-panel .guide-section .guide-action{margin-top:10px}
+.proj-guide-panel .guide-optional{margin-top:9px}
+.proj-guide-panel .guide-optional select{font-size:.9rem}
 </style>
 </head>
 <body>
@@ -481,6 +498,62 @@
               <div class="note">QR Code 自動對應此專案固定學員連結。建議使用 HTTPS 網址部署。若 QR 程式庫未載入，仍可複製連結加入。</div>
             </section>
             <div style="min-width:0;display:flex;flex-direction:column;gap:18px">
+              <!-- v2.2: 累計組只能於講師後台設定；所有設定寫入原有 Firebase cumulativeGroups，維持相容。 -->
+              <section class="panel teacher-cumulative-panel" aria-label="累計組設定（講師後台）">
+                <details @toggle="onCumulativeSettingsToggle($event.target.open)">
+                  <summary>🏆 累計組設定（可建立多組）</summary>
+                  <p class="small" style="margin:12px 0">只在此頁建立、編輯或封存累計組；投影只供選擇已建立的組別、查看排名。例：題組 1＋2＋3 一組、4＋5 一組，互不影響。</p>
+                  <div class="teacher-cg-toolbar">
+                    <button type="button" :disabled="cumulativeLoading" @click="refreshCumulativeSessions">{{cumulativeLoading?'讀取中…':'↻ 更新歷史場次清單'}}</button>
+                    <span class="small" v-if="cumulativeLoadedAt">更新於 {{new Date(cumulativeLoadedAt).toLocaleString('zh-TW')}}</span>
+                  </div>
+                  <div v-if="cumulativeError" class="alert" role="alert">⚠ {{cumulativeError}}</div>
+            <section class="cumulative-groups" aria-label="講師後台管理自訂累計組">
+              <h3>⚙ 累計組管理</h3>
+              <p style="line-height:1.6">每個累計組都有獨立名稱、題組清單與採用的歷史場次。不同組可以包含相同題組；同一題組重測時只選一場，絕不重複累計。封存可恢復，歷史答案不會被更動。</p>
+              <button class="cumulative-action gold" @click="beginCumulativeCreate">＋ 建立新的累計組</button>
+              <div v-for="g in cumulativeAllGroups" :key="g.id" class="cg-row" :class="{archived:g.archived}">
+                <strong>{{g.name}} {{g.archived?'（已封存）':''}}</strong>
+                <p>📚 {{(g.setIds||[]).map(id=>sets[id]?.name||'題組已不存在').join(' ＋ ')||'尚未選題組'}}</p>
+                <div class="cg-tools">
+                  <span v-if="!g.archived" class="small">投影畫面可直接選擇此累計組並顯示排名</span>
+                  <button v-if="!g.archived" :disabled="cumulativeSaving" @click="beginCumulativeEdit(g)">✏️ 編輯</button>
+                  <button :disabled="cumulativeSaving" @click="prepareCumulativeRollback(g)">↶ 還原前一版設定</button>
+                  <button v-if="!g.archived" class="archive" :disabled="cumulativeSaving" @click="confirmCumulativeArchive(g,false)">📦 封存</button>
+                  <button v-else :disabled="cumulativeSaving" @click="confirmCumulativeArchive(g,true)">↶ 還原</button>
+                </div>
+              </div>
+              <div v-if="!cumulativeAllGroups.length" class="cumulative-note" style="color:#1e293b;background:#e0f2fe">尚無累計組。您可以建立「第一～三題組總排名」、「第四～五題組總排名」等，數量不限。</div>
+              <div v-if="cumulativeEditorVisible" class="cumulative-form" id="cumulative-editor">
+                <h3>{{cumulativeEditingId?'✏️ 編輯累計組':'＋ 建立累計組'}}</h3>
+                <label for="cg-name">累計組名稱</label>
+                <input id="cg-name" type="text" v-model.trim="cumulativeEditorName" maxlength="60" placeholder="例：第一階段（題組 1＋2＋3）">
+                <label>請勾選要合計的題組（可多選）</label>
+                <div v-for="st in cumulativeSetChoices" :key="st.id" class="cg-choice">
+                  <input type="checkbox" :id="'cum-'+st.id" :checked="cumulativeEditorSetIds.includes(st.id)" @change="toggleCumulativeEditorSet(st.id,$event.target.checked)">
+                  <label :for="'cum-'+st.id" style="margin:0;flex:1;cursor:pointer">{{st.name}}{{st.archived?'（已封存）':''}}</label>
+                </div>
+                <div v-if="!cumulativeSetChoices.length">尚無題組，請先在左側「題組管理」建立題組。</div>
+                <div v-if="cumulativeEditorSetIds.length" style="margin-top:14px">
+                  <h3>每個題組採用哪一場？</h3>
+                  <p style="font-size:.88rem;color:#475569">預設自動取「最近一場」。如果某題組重測過，可以指定一場歷史測驗，確保同一題組不會重複計分。</p>
+                  <div v-for="sid in cumulativeEditorSetIds" :key="sid" class="cg-pick">
+                    <label :for="'pick-'+sid">{{sets[sid]?.name||'已不存在的題組'}}</label>
+                    <select :id="'pick-'+sid" :value="cumulativeEditorSessionPick[sid]||'latest'" @change="setCumulativeSessionChoice(sid,$event.target.value)">
+                      <option value="latest">自動採用最近一場（每個題組只取一場）</option>
+                      <option v-for="h in cumulativeSessionSummariesForSet(sid)" :key="h.id" :value="h.id">{{new Date(h.createdAt).toLocaleString('zh-TW')}} · 已公布 {{h.published}} 題 · {{h.id.slice(-8)}}</option>
+                      <option v-if="cumulativeEditorSessionPick[sid]&&cumulativeEditorSessionPick[sid]!=='latest'&&!cumulativeSessionSummariesForSet(sid).some(h=>h.id===cumulativeEditorSessionPick[sid])" :value="cumulativeEditorSessionPick[sid]">⚠ 原指定場次不存在，請重新選擇</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="cg-actions">
+                  <button :disabled="cumulativeSaving||!cumulativeEditorName||!cumulativeEditorSetIds.length" @click="saveCumulativeGroup">{{cumulativeSaving?'正在儲存…':'💾 儲存累計組'}}</button>
+                  <button class="cancel" type="button" :disabled="cumulativeSaving" @click="cumulativeEditorVisible=false">取消</button>
+                </div>
+              </div>
+            </section>
+                </details>
+              </section>
               <section class="panel">
                 <div class="topbar" style="margin-bottom:10px"><h2 style="margin:0">✏️ {{ selectedSet ? selectedSet.name : '請先選擇題組' }}</h2><button class="rounded-action primary" :disabled="!selectedSet" @click="openNewQuestion">＋ 新增題目</button></div>
                 <template v-if="selectedSet">
@@ -496,6 +569,7 @@
                 </details>
                 </template>
               </section>
+
               <section class="panel">
                 <h2>🎤 即時測驗｜講師三步驟</h2>
                 <div v-if="activeSessionId" class="statusbox">
@@ -721,67 +795,47 @@
             </div>
           </section>
 
-          <!-- v2.0 教學導覽抽屜：關閉時完全不擠壓原有投影題目與四格選項 -->
+          <!-- v2.2：右上方簡化成兩區；不影響原投影題目、選項與排行榜配置 -->
           <div v-if="navigationOpen&&hasAdminAccess" class="proj-guide-overlay" @click.self="navigationOpen=false" @keydown.esc.stop="navigationOpen=false">
-            <aside class="proj-guide-panel" role="dialog" aria-modal="true" aria-label="講師教學導覽" tabindex="-1">
-              <div class="guide-head"><h2>📚 講師教學導覽</h2><button class="guide-close" type="button" @click="navigationOpen=false">✕ 關閉</button></div>
-              <div class="guide-help">任意時間跨題組回看、上一題／下一題檢討，或開始其他題組。關閉導覽後，測驗畫面的配置完全不變。</div>
+            <aside class="proj-guide-panel" role="dialog" aria-modal="true" aria-label="題組開始與回看" tabindex="-1">
+              <div class="guide-head"><h2>📚 題組／回看</h2><button class="guide-close" type="button" @click="navigationOpen=false">✕</button></div>
               <div class="guide-section">
-                <label for="navSet">① 選擇題組</label>
-                <select id="navSet" :value="navigationSetId" @change="navigationChooseSet($event.target.value)">
+                <h3>▶ 選題組開始測驗</h3>
+                <select id="navStartSet" v-model="navigationStartSetId" aria-label="選擇要開始的題組">
                   <option disabled value="">請選擇題組</option>
-                  <option v-for="g in navigationAllSets" :key="g.id" :value="g.id">{{g.name}}{{g.archived?'（僅可回看）':''}}</option>
+                  <option v-for="g in activeSets" :key="g.id" :value="g.id">{{g.name}}（{{questionCount(g.id)}} 題）</option>
                 </select>
-                <div class="guide-status" v-if="navigationLoading">⏳ 正在取得歷史場次…</div>
-                <div class="guide-status" v-else-if="navigationError">⚠ {{navigationError}}</div>
-                <div class="guide-status" v-else>回看採唯讀歷史快照；不會改變學員手機、目前題號或成績。</div>
+                <button class="guide-action begin" type="button" :disabled="working||navigationWorking||!navigationCanStart" @click="prepareNavigationStart">▶ 開始此題組</button>
+                <p class="guide-status">建立新場次需再次確認；已上課的答案、成績與歷史紀錄保留。</p>
               </div>
               <div class="guide-section">
-                <h3>📖 回看任何已上課的題目</h3>
-                <label for="navSession">② 選擇測驗場次</label>
-                <select id="navSession" :value="navigationSessionId" :disabled="navigationLoading||!navigationFilteredSessions.length" @change="navigationChooseSession($event.target.value)">
-                  <option v-if="!navigationFilteredSessions.length" value="">此題組尚無歷史場次</option>
-                  <option v-for="h in navigationFilteredSessions" :key="h.id" :value="h.id">{{new Date(h.createdAt).toLocaleString('zh-TW')}} · {{h.published}}/{{h.count}} 題已公布{{h.id===projectRuntime.activeSessionId?'（目前現場）':''}}</option>
+                <h3>📖 選已完成題組回看</h3>
+                <div v-if="navigationLoading" class="guide-status">⏳ 讀取歷史紀錄…</div>
+                <div v-else-if="navigationError" class="guide-warning" role="alert">⚠ {{navigationError}}</div>
+                <select id="navReviewSet" :value="navigationSetId" :disabled="navigationLoading||!navigationReviewSets.length" @change="navigationChooseSet($event.target.value)" aria-label="選擇完成的題組">
+                  <option v-if="!navigationReviewSets.length" value="">尚無可回看的已結束題組</option>
+                  <option v-for="g in navigationReviewSets" :key="g.id" :value="g.id">{{g.name}}</option>
                 </select>
-                <label for="navQuestion">③ 直接選擇題號</label>
-                <select id="navQuestion" v-model.number="navigationTargetIndex" :disabled="!navigationSelectedSession">
-                  <option v-for="i in navigationQuestionNumbers" :key="i" :value="i-1">第 {{i}} 題</option>
-                </select>
-                <button class="guide-action" type="button" :disabled="navigationWorking||navigationLoading||!navigationSelectedSession" @click="openNavigationReview">📖 回看所選題目（可自由上下題）</button>
-                <p class="guide-status" v-if="!navigationFilteredSessions.length">此題組若還未測驗，可直接使用下方「開始新場次」；未公布的答案不會因回看而被公開。</p>
-                <button class="guide-close" style="margin-top:6px" type="button" :disabled="navigationLoading||navigationWorking" @click="loadNavigationSessions(true)">↻ 更新歷史場次清單</button>
-              </div>
-              <div class="guide-section">
-                <h3>▶ 隨時開始選定的題組</h3>
-                <div class="guide-warning">這是<strong>開啟全新測驗場次</strong>，不是唯讀回看。若已有未結束的現場場次，確認後會先保留該場完整紀錄及備份，安全標記結束，再開放新題組第一題；不會刪除舊答案。</div>
-                <button class="guide-action begin" type="button" :disabled="working||navigationWorking||!navigationCanStart" @click="prepareNavigationStart">▶ 開始此題組的新場次</button>
-                <p class="guide-status" v-if="!navigationCanStart">只有未封存、且至少有一題的題組可以開始新場次。</p>
-              </div>
-              <div class="guide-section">
-                <h3>🏆 自訂多組累計排行榜</h3>
-                <div class="guide-help">可建立多個累計組，各自指定要合計的題組及場次；回看與累計排名都不會改動學員作答。</div>
-                <button class="guide-action" type="button" @click="openCumulativePanel">🏆 開啟累計排名與管理</button>
-              </div>
-              <div class="guide-section" v-if="projectionIsReview">
-                <h3>↩ 回到現場</h3>
-                <div class="guide-help">目前只是投影端回看；學員端仍維持原本正在進行的場次。</div>
-                <button class="guide-action" type="button" @click="returnLiveProjection">↩ 返回目前現場題目</button>
+                <div v-if="navigationFilteredSessions.length>1" class="guide-optional">
+                  <label for="navReviewSession">選擇測驗場次</label>
+                  <select id="navReviewSession" :value="navigationSessionId" @change="navigationChooseSession($event.target.value)">
+                    <option v-for="h in navigationFilteredSessions" :key="h.id" :value="h.id">{{new Date(h.createdAt).toLocaleString('zh-TW')}} · {{h.published}}/{{h.count}} 題{{h.published<h.count?'（部分已公布）':''}}</option>
+                  </select>
+                </div>
+                <button class="guide-action" type="button" :disabled="navigationWorking||navigationLoading||!navigationSelectedSession" @click="openNavigationReview">📖 開始回看</button>
+                <p class="guide-status">進入後可用「上一題／下一題／跳題」自由檢討，不影響學員答題。</p>
+                <button class="guide-close" style="margin-top:8px" type="button" :disabled="navigationLoading||navigationWorking" @click="loadNavigationSessions(true)">↻ 更新回看清單</button>
               </div>
             </aside>
           </div>
 
-        <!-- v2.1 累計組：純投影操作浮層，關閉後保留全部原有畫面、題號、排名與作答 -->
-        <div v-if="cumulativeOpen&&hasAdminAccess" class="cumulative-layer" role="dialog" aria-modal="true" aria-label="講師自訂累計排行榜" @keydown.esc.stop="cumulativeOpen=false">
+        <!-- v2.2：投影端只選擇已設定好的累計組與看排名，完全沒有編輯設定入口 -->
+        <div v-if="cumulativeOpen&&hasAdminAccess" class="cumulative-layer" role="dialog" aria-modal="true" aria-label="講師累計排行榜" @keydown.esc.stop="cumulativeOpen=false">
           <div class="cumulative-shell">
             <div class="cumulative-head">
-              <div><h2>🏆 自訂累計排行榜</h2><p>多個獨立累計組 · 講師決定哪些題組一起計算 · 不改動原本題組排行榜</p></div>
-              <button type="button" class="cumulative-close" @click="cumulativeOpen=false">✕ 關閉，返回投影</button>
+              <div><h2>🏆 累計排行榜</h2><p>請選擇講師後台已設定的累計組；不改動測驗進度、題目或成績</p></div>
+              <button type="button" class="cumulative-close" @click="cumulativeOpen=false">✕ 返回投影</button>
             </div>
-            <div class="cumulative-tabs">
-              <button :class="{active:cumulativeTab==='ranking'}" @click="cumulativeTab='ranking'">🏆 查看累計排名</button>
-              <button :class="{active:cumulativeTab==='manage'}" @click="cumulativeTab='manage'">⚙ 管理累計組</button>
-            </div>
-            <template v-if="cumulativeTab==='ranking'">
               <div class="cumulative-controls">
                 <label for="cum-group-list">選擇累計組</label>
                 <select id="cum-group-list" v-model="cumulativeChosenId">
@@ -789,11 +843,10 @@
                   <option v-for="g in cumulativeActiveGroups" :key="g.id" :value="g.id">{{g.name}}（{{g.setIds?.length||0}} 個題組）</option>
                 </select>
                 <button class="cumulative-action" :disabled="cumulativeLoading" @click="refreshCumulativeSessions">↻ 更新計分資料</button>
-                <button class="cumulative-action gold" @click="beginCumulativeCreate">＋ 建立累計組</button>
               </div>
               <div v-if="cumulativeError" class="cumulative-note cumulative-warning" role="alert">⚠ {{cumulativeError}}</div>
               <div class="cumulative-note" v-if="cumulativeLoadedAt">以最新讀取的已公布題目計算 · 資料讀取時間：{{new Date(cumulativeLoadedAt).toLocaleString('zh-TW')}}。學員仍在答題時，可按「更新計分資料」取得新的排名。</div>
-              <div v-if="!cumulativeActiveGroups.length" class="cumulative-board"><h3>目前沒有累計組</h3><p>先按「＋ 建立累計組」，勾選例如第 1、2、3 題組並命名。您還能另外建立 4＋5、7＋8＋9 等其他累計組。</p></div>
+              <div v-if="!cumulativeActiveGroups.length" class="cumulative-board"><h3>尚無可顯示的累計組</h3><p>請先在「講師後台 → 累計組設定」建立與勾選題組；投影僅查看已設定好的累計排行榜。</p></div>
               <div v-else-if="cumulativeLoading&&!cumulativeLoadedAt" class="cumulative-board">⏳ 正在讀取課堂紀錄與成績…</div>
               <div v-else-if="cumulativeChosenGroup" class="cumulative-board">
                 <div class="cumulative-board-title">
@@ -814,51 +867,6 @@
                 </div>
                 <div v-else class="cumulative-note">這個累計組目前沒有可排名的學員。完成題組測驗並公布結果後，再更新計分資料即可查看。</div>
               </div>
-            </template>
-            <section v-else class="cumulative-groups" aria-label="管理自訂累計組">
-              <h3>⚙ 累計組管理</h3>
-              <p style="line-height:1.6">每個累計組都有獨立名稱、題組清單與採用的歷史場次。不同組可以包含相同題組；同一題組重測時只選一場，絕不重複累計。封存可恢復，歷史答案不會被更動。</p>
-              <button class="cumulative-action gold" @click="beginCumulativeCreate">＋ 建立新的累計組</button>
-              <div v-for="g in cumulativeAllGroups" :key="g.id" class="cg-row" :class="{archived:g.archived}">
-                <strong>{{g.name}} {{g.archived?'（已封存）':''}}</strong>
-                <p>📚 {{(g.setIds||[]).map(id=>sets[id]?.name||'題組已不存在').join(' ＋ ')||'尚未選題組'}}</p>
-                <div class="cg-tools">
-                  <button v-if="!g.archived" :disabled="cumulativeSaving" @click="cumulativeChosenId=g.id;cumulativeTab='ranking'">🏆 查看排名</button>
-                  <button v-if="!g.archived" :disabled="cumulativeSaving" @click="beginCumulativeEdit(g)">✏️ 編輯</button>
-                  <button :disabled="cumulativeSaving" @click="prepareCumulativeRollback(g)">↶ 還原前一版設定</button>
-                  <button v-if="!g.archived" class="archive" :disabled="cumulativeSaving" @click="confirmCumulativeArchive(g,false)">📦 封存</button>
-                  <button v-else :disabled="cumulativeSaving" @click="confirmCumulativeArchive(g,true)">↶ 還原</button>
-                </div>
-              </div>
-              <div v-if="!cumulativeAllGroups.length" class="cumulative-note" style="color:#1e293b;background:#e0f2fe">尚無累計組。您可以建立「第一～三題組總排名」、「第四～五題組總排名」等，數量不限。</div>
-              <div v-if="cumulativeEditorVisible" class="cumulative-form" id="cumulative-editor">
-                <h3>{{cumulativeEditingId?'✏️ 編輯累計組':'＋ 建立累計組'}}</h3>
-                <label for="cg-name">累計組名稱</label>
-                <input id="cg-name" type="text" v-model.trim="cumulativeEditorName" maxlength="60" placeholder="例：第一階段（題組 1＋2＋3）">
-                <label>請勾選要合計的題組（可多選）</label>
-                <div v-for="st in cumulativeSetChoices" :key="st.id" class="cg-choice">
-                  <input type="checkbox" :id="'cum-'+st.id" :checked="cumulativeEditorSetIds.includes(st.id)" @change="toggleCumulativeEditorSet(st.id,$event.target.checked)">
-                  <label :for="'cum-'+st.id" style="margin:0;flex:1;cursor:pointer">{{st.name}}{{st.archived?'（已封存）':''}}</label>
-                </div>
-                <div v-if="!cumulativeSetChoices.length">尚無題組，請先在講師管理頁建立題組。</div>
-                <div v-if="cumulativeEditorSetIds.length" style="margin-top:14px">
-                  <h3>每個題組採用哪一場？</h3>
-                  <p style="font-size:.88rem;color:#475569">預設自動取「最近一場」。如果某題組重測過，可以指定一場歷史測驗，確保同一題組不會重複計分。</p>
-                  <div v-for="sid in cumulativeEditorSetIds" :key="sid" class="cg-pick">
-                    <label :for="'pick-'+sid">{{sets[sid]?.name||'已不存在的題組'}}</label>
-                    <select :id="'pick-'+sid" :value="cumulativeEditorSessionPick[sid]||'latest'" @change="setCumulativeSessionChoice(sid,$event.target.value)">
-                      <option value="latest">自動採用最近一場（每個題組只取一場）</option>
-                      <option v-for="h in cumulativeSessionSummariesForSet(sid)" :key="h.id" :value="h.id">{{new Date(h.createdAt).toLocaleString('zh-TW')}} · 已公布 {{h.published}} 題 · {{h.id.slice(-8)}}</option>
-                      <option v-if="cumulativeEditorSessionPick[sid]&&cumulativeEditorSessionPick[sid]!=='latest'&&!cumulativeSessionSummariesForSet(sid).some(h=>h.id===cumulativeEditorSessionPick[sid])" :value="cumulativeEditorSessionPick[sid]">⚠ 原指定場次不存在，請重新選擇</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="cg-actions">
-                  <button :disabled="cumulativeSaving||!cumulativeEditorName||!cumulativeEditorSetIds.length" @click="saveCumulativeGroup">{{cumulativeSaving?'正在儲存…':'💾 儲存累計組'}}</button>
-                  <button class="cancel" type="button" :disabled="cumulativeSaving" @click="cumulativeEditorVisible=false">取消</button>
-                </div>
-              </div>
-            </section>
           </div>
         </div>
         </div>
@@ -1083,7 +1091,7 @@
       _lastRankAnimationKey:'',autoAdvanceTimer:null,
       // v2.0：獨立於現場 session 的唯讀投影回看，切換回看不碰 runtime
       navigationOpen:false,navigationLoading:false,navigationWorking:false,navigationLoaded:false,navigationError:'',
-      navigationSessions:[],navigationSetId:'',navigationSessionId:'',navigationTargetIndex:0,
+      navigationSessions:[],navigationSetId:'',navigationStartSetId:'',navigationSessionId:'',navigationTargetIndex:0,
       navigationReviewId:'',navigationReviewRecord:null,navigationReviewIndex:0,
       // v2.1：累計組設定與只讀成績快照獨立於測驗進度
       cumulativeGroups:{},cumulativeOpen:false,cumulativeTab:'ranking',cumulativeChosenId:'',
@@ -1119,10 +1127,19 @@
         }}
         return rows;
       },
-      navigationFilteredSessions(){return this.navigationSessions.filter(h=>h.setKey===this.navigationSetId);},
+      navigationCompletedSessions(){return this.navigationSessions.filter(h=>h.published>0&&(h.finishedAt||h.published>=h.count));},
+      navigationReviewSets(){
+        const seen=new Set(),out=[];
+        for(const h of this.navigationCompletedSessions){if(seen.has(h.setKey))continue;seen.add(h.setKey);
+          const item=this.navigationAllSets.find(g=>g.id===h.setKey);
+          out.push(item||{id:h.setKey,name:h.setName,archived:true});
+        }
+        return out;
+      },
+      navigationFilteredSessions(){return this.navigationCompletedSessions.filter(h=>h.setKey===this.navigationSetId);},
       navigationSelectedSession(){return this.navigationFilteredSessions.find(h=>h.id===this.navigationSessionId)||null;},
       navigationQuestionNumbers(){return Array.from({length:this.navigationSelectedSession?.count||0},(_,i)=>i+1);},
-      navigationCanStart(){return this.activeSets.some(s=>s.id===this.navigationSetId)&&this.questionCount(this.navigationSetId)>0;},
+      navigationCanStart(){return this.activeSets.some(s=>s.id===this.navigationStartSetId)&&this.questionCount(this.navigationStartSetId)>0;},
       cumulativeAllGroups(){return Object.entries(this.cumulativeGroups||{}).map(([id,v])=>({id,...v})).sort((a,b)=>(Number(a.createdAt)||0)-(Number(b.createdAt)||0)||a.id.localeCompare(b.id));},
       cumulativeActiveGroups(){return this.cumulativeAllGroups.filter(g=>!g.archived);},
       cumulativeChosenGroup(){return this.cumulativeActiveGroups.find(g=>g.id===this.cumulativeChosenId)||null;},
@@ -1295,10 +1312,12 @@
       openCumulativePanel(){
         if(this.currentView!=='display'||!this.hasAdminAccess)return;
         this.navigationOpen=false;this.attachTeacher();this.cumulativeOpen=true;
-        this.cumulativeTab=this.cumulativeActiveGroups.length?'ranking':'manage';
         if(!this.cumulativeChosenId)this.cumulativeChosenId=this.cumulativeActiveGroups[0]?.id||'';
         // 每次開啟都重新讀取，避免回看時展示過期的排行榜。
         this.refreshCumulativeSessions();
+      },
+      onCumulativeSettingsToggle(isOpen){
+        if(isOpen&&this.currentView==='teacher'&&!this.cumulativeLoadedAt&&!this.cumulativeLoading)this.refreshCumulativeSessions();
       },
       async refreshCumulativeSessions(){
         if(this.cumulativeLoading||!this.hasAdminAccess||!this.projectId)return;
@@ -1441,12 +1460,13 @@
         this.navigationOpen=!this.navigationOpen;
         if(!this.navigationOpen)return;
         this.attachTeacher(); // 由歷史場次連結進入的投影也能取得最新題組清單
-        if(!this.navigationSetId){
-          const sets=this.activeSets, current=sets.findIndex(x=>x.id===this.session.setId);
+        const sets=this.activeSets, current=sets.findIndex(x=>x.id===this.session.setId);
+        if(!this.navigationStartSetId||!sets.some(s=>s.id===this.navigationStartSetId)){
           const preferred=(current>=0&&this.isLastQuestion&&sets.length>1)?sets[(current+1)%sets.length]:sets[current]||sets[0];
-          this.navigationSetId=preferred?.id||'';
+          this.navigationStartSetId=preferred?.id||'';
         }
-        this.loadNavigationSessions();
+        // 回看清單每次打開重新驗證是否已結束與有已公布的題目。
+        this.loadNavigationSessions(true);
       },
       async loadNavigationSessions(force=false){
         if(!this.hasAdminAccess||!this.projectId||this.navigationLoading||this.navigationWorking)return;
@@ -1463,7 +1483,7 @@
             count:v.order.length,published:Object.keys(v.results||{}).length
           })).sort((a,b)=>b.createdAt-a.createdAt||b.id.localeCompare(a.id));
           this.navigationLoaded=true;
-          if(!this.navigationAllSets.some(s=>s.id===this.navigationSetId))this.navigationSetId=this.navigationAllSets[0]?.id||'';
+          if(!this.navigationReviewSets.some(s=>s.id===this.navigationSetId))this.navigationSetId=this.navigationReviewSets[0]?.id||'';
           this.navigationChooseSet(this.navigationSetId);
         }catch(e){this.navigationError='讀取歷史場次失敗：'+e.message;this.showMessage('❌ '+this.navigationError);}
         finally{this.navigationLoading=false;}
@@ -1516,7 +1536,7 @@
       },
       prepareNavigationStart(){
         if(!this.hasAdminAccess||this.working||this.navigationWorking||!this.navigationCanStart)return;
-        const target=this.navigationSetId, name=this.sets[target]?.name||'題組';
+        const target=this.navigationStartSetId, name=this.sets[target]?.name||'題組';
         const liveName=this.projectRuntime?.activeSessionId?(this.session.setName||'目前題組'):'';
         const msg=`確定立即開始「${name}」的新測驗場次？\n\n${liveName?'目前現場「'+liveName+'」若尚未結束，會先安全標記結束、建立可追溯雲端 checkpoint，並完整保留舊題目、答案、排名與歷史場次。\n\n':''}新場次會從第 1 題直接開放作答，學員手機將同步切換。\n\n「回看」只需按上方回看功能，不必開始新場次。`;
         this.askConfirm(msg,()=>this.createNavigationSession(target));
@@ -1576,6 +1596,7 @@
           try{const url=new URL(location.href);if(url.searchParams.has('history')){url.searchParams.delete('history');history.replaceState(null,'',url.href);}}catch(e){}
           this.navigationOpen=false;this.navigationLoaded=false;this.navigationSessions=[];
           this.selectedSetId=targetSetId;
+          this.navigationStartSetId=targetSetId;
           if(this.activeSessionId!==sessionId){this.activeSessionId=sessionId;this.bindSession();}
           this.$nextTick(()=>this.renderQR());
           this.showMessage('✅ 已保留舊場次，開始「'+set.name+'」第 1 題');
