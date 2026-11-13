@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>課堂互動即時答題系統 v1.9｜投影解析可捲動・講師按下一題才顯示排名</title>
+<title>課堂互動即時答題系統 v2.0｜投影自由跨題組回看與開場・保留原有測驗畫面</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -293,6 +293,28 @@
 .results-panel .answer-explanation-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}
 @media(max-width:700px){.proj-fullscreen .projection-layout{height:calc(100dvh - 245px);min-height:280px}.proj-fullscreen .projection-layout .stage-question{min-height:0}}
 @media(max-height:550px){.proj-fullscreen .projection-layout{height:calc(100dvh - 175px);min-height:190px}}
+
+/* === v2.0 講師投影端的「教學導覽」：平時只佔一個標題列小按鈕，不改動題目、四格與排行榜版型 === */
+.proj-fullscreen .nav-toggle{background:#25466d;color:#fff;border-color:#7798bd;white-space:nowrap}
+.proj-fullscreen .nav-toggle:hover{background:#315b87}
+.proj-guide-overlay{position:fixed;inset:0;background:#071226b8;z-index:520;display:flex;justify-content:flex-end;align-items:stretch;padding:12px;box-sizing:border-box}
+.proj-guide-panel{width:min(440px,100%);height:100%;max-height:100%;overflow-y:auto;overscroll-behavior:contain;background:#f8fafc;color:#1e293b;border:1px solid #96b1d3;border-radius:18px;box-shadow:0 20px 65px #0009;padding:19px;box-sizing:border-box;scrollbar-color:#7798bd #e2e8f0}
+.proj-guide-panel h2{margin:0;color:#0f172a;font-size:1.35rem}
+.proj-guide-panel h3{margin:0 0 10px;color:#0f172a;font-size:1.05rem}
+.proj-guide-panel .guide-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
+.proj-guide-panel .guide-help{font-size:.88rem;color:#475569;line-height:1.6}
+.proj-guide-panel .guide-section{border:1px solid #cbd5e1;border-radius:13px;background:#fff;padding:14px;margin-top:13px}
+.proj-guide-panel label{display:block;margin:9px 0 5px;font-weight:800;font-size:.93rem;color:#334155}
+.proj-guide-panel select{display:block;width:100%;max-width:100%;min-width:0;padding:10px;border:1px solid #a9b9d0;border-radius:8px;background:#fff;color:#0f172a;font:inherit}
+.proj-guide-panel button{font:inherit;font-weight:800}
+.proj-guide-panel .guide-action{width:100%;min-height:46px;border:0;border-radius:9px;padding:9px 12px;cursor:pointer;background:#0369a1;color:#fff;margin-top:11px}
+.proj-guide-panel .guide-action.begin{background:#e49c09;color:#111827}
+.proj-guide-panel .guide-action:disabled{opacity:.45;cursor:not-allowed}
+.proj-guide-panel .guide-tag{display:inline-block;border-radius:20px;padding:3px 9px;background:#dbeafe;color:#1e40af;font-size:.8rem;font-weight:900}
+.proj-guide-panel .guide-status{margin-top:9px;line-height:1.5;color:#475569;font-size:.86rem}
+.proj-guide-panel .guide-close{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:8px;padding:7px 11px;cursor:pointer;color:#334155}
+.proj-guide-panel .guide-warning{background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:9px 10px;color:#9a3412;font-size:.85rem;line-height:1.5}
+@media(max-width:580px){.proj-guide-overlay{padding:0}.proj-guide-panel{width:100%;border-radius:0;padding:14px}.proj-fullscreen .showcase-tools .nav-toggle{padding:8px 10px}}
 </style>
 </head>
 <body>
@@ -543,27 +565,28 @@
 
         
         <!-- 投影畫面：公布後停留在可捲動的正解與解析；只有按下一題才展示排名並自動切題 -->
-        <div v-else-if="currentView==='display'" class="proj-fullscreen" :class="{'review-view':!!fixedSessionId}">
+        <div v-else-if="currentView==='display'" class="proj-fullscreen" :class="{'review-view':projectionIsReview}">
           <div v-if="errorMessage" class="alert" role="alert">{{errorMessage}}</div>
           <header class="showcase-head">
             <div class="showcase-title">
               <h1>🎯 {{projectionSetName}}</h1>
-              <div class="showcase-sub">{{fixedSessionId?'📖 靜態逐題回看':('現場互動 · 已加入 '+memberCount+' 人')}} <span v-if="!fixedSessionId && currentQuestion">　·　第 {{session.state.questionIndex+1}} / {{session.order.length}} 題</span></div>
+              <div class="showcase-sub">{{projectionIsReview?'📖 靜態逐題回看（不影響學員進度）':('現場互動 · 已加入 '+memberCount+' 人')}} <span v-if="!projectionIsReview && currentQuestion">　·　第 {{session.state.questionIndex+1}} / {{session.order.length}} 題</span></div>
             </div>
             <div class="showcase-tools">
-              <button v-if="!fixedSessionId && !isRankScene" class="rounded-action" @click="qrVisible=!qrVisible">{{qrVisible?'收合':'顯示'}} QR</button>
-              <button v-if="inlineReviewMode" class="rounded-action" @click="exitInlineReview">↩ 返回現場</button>
+              <button v-if="!projectionIsReview && !isRankScene" class="rounded-action" @click="qrVisible=!qrVisible">{{qrVisible?'收合':'顯示'}} QR</button>
+              <button v-if="projectionIsReview" class="rounded-action" @click="returnLiveProjection">↩ 返回現場</button>
+              <button v-if="hasAdminAccess" class="rounded-action nav-toggle" type="button" :aria-expanded="navigationOpen" @click="toggleProjectionNavigation">📚 題組／回看</button>
               <button class="rounded-action" @click="toggleFullscreen">⛶ 全螢幕</button>
             </div>
           </header>
           <!-- 回看只讀：從第一題開始，可向前／向後／直接跳題，絕不播放動畫 -->
-          <nav v-if="fixedSessionId" class="review-command" aria-label="逐題回顧操作">
-            <button class="rounded-action" @click="reviewDisplayMove(-1)" :disabled="historyIndex<=0">← 上一題</button>
+          <nav v-if="projectionIsReview" class="review-command" aria-label="逐題回顧操作">
+            <button class="rounded-action" @click="projectionReviewMove(-1)" :disabled="projectionQuestionIndex<=0">← 上一題</button>
             <label style="color:#fff;font-weight:900;font-size:clamp(.95rem,1.4vw,1.3rem)">第
-              <select :value="historyIndex" @change="reviewDisplayJump($event.target.value)" aria-label="直接跳至題號">
-                <option v-for="(qid,i) in session.order" :key="qid" :value="i">{{i+1}}</option>
-              </select> / {{session.order.length}} 題</label>
-            <button class="rounded-action" @click="reviewDisplayMove(1)" :disabled="historyIndex>=session.order.length-1">下一題 →</button>
+              <select :value="projectionQuestionIndex" @change="projectionReviewJump($event.target.value)" aria-label="直接跳至題號">
+                <option v-for="(qid,i) in projectionOrder" :key="qid" :value="i">{{i+1}}</option>
+              </select> / {{projectionOrder.length}} 題</label>
+            <button class="rounded-action" @click="projectionReviewMove(1)" :disabled="projectionQuestionIndex>=projectionOrder.length-1">下一題 →</button>
           </nav>
           <!-- 主按鈕位置固定，只有文字與行為隨教學階段更換 -->
           <section class="projection-command" v-else-if="hasAdminAccess" aria-label="講師現場控制">
@@ -602,44 +625,88 @@
             <div class="ranking-foot"><span>排名依已公布題目的累積答對數與正確率計算</span><span>{{memberCount}} 位學員 · 可上下捲動觀看全部排名</span></div>
           </section>
           <!-- 結果畫面第一幕 / 出題畫面 / 只讀回顧：大題目及醒目四格 -->
-          <section v-else class="projection-layout" :class="{noqr:!qrVisible||!!fixedSessionId}" :style="{'--qr-width':qrWidthPercent+'%'}">
-            <aside class="qr-side" v-if="qrVisible&&!fixedSessionId">
+          <section v-else class="projection-layout" :class="{noqr:!qrVisible||projectionIsReview}" :style="{'--qr-width':qrWidthPercent+'%'}">
+            <aside class="qr-side" v-if="qrVisible&&!projectionIsReview">
               <h3 style="font-size:clamp(1.15rem,1.8vw,2rem);margin:4px 0">📱 掃碼參加</h3><div class="qr-render" ref="displayQr"></div>
               <div class="small">輸入暱稱，一起作答</div>
             </aside>
-            <div ref="projectionStage" tabindex="0" role="region" aria-label="題目與答案解析，可上下捲動" class="stage-question" :class="{'reveal-active':phase==='revealed'&&revealAnimating&&!fixedSessionId&&revealStage==='answer'}">
-              <div v-if="!currentQuestion" class="student-wait">⏳ 等待講師選擇題組開始上課</div>
+            <div ref="projectionStage" tabindex="0" role="region" aria-label="題目與答案解析，可上下捲動" class="stage-question" :class="{'reveal-active':projectionPhase==='revealed'&&revealAnimating&&!projectionIsReview&&revealStage==='answer'}">
+              <div v-if="!projectionQuestion" class="student-wait">⏳ 等待講師選擇題組開始上課</div>
               <template v-else>
-                <div class="question-kicker"><span>QUESTION {{fixedSessionId?historyIndex+1:session.state.questionIndex+1}} / {{session.order.length}}</span>
-                  <span v-if="fixedSessionId">📖 逐題回看 · 不播放動畫</span>
-                  <span v-else-if="phase==='asking'">{{currentQuestion.duration?('剩餘 '+remainingSec+' 秒'):'不限時間'}}　·　{{currentAnswerCount}} 人已答</span>
-                  <span v-else-if="phase==='revealed'">📖 已公布正解 · 可向下捲動看解析</span>
+                <div class="question-kicker"><span>QUESTION {{projectionQuestionIndex+1}} / {{projectionOrder.length}}</span>
+                  <span v-if="projectionIsReview">📖 逐題回看 · 不播放動畫</span>
+                  <span v-else-if="projectionPhase==='asking'">{{projectionQuestion.duration?('剩餘 '+remainingSec+' 秒'):'不限時間'}}　·　{{currentAnswerCount}} 人已答</span>
+                  <span v-else-if="projectionPhase==='revealed'">📖 已公布正解 · 可向下捲動看解析</span>
                   <span v-else>等待公布</span>
                 </div>
-                <h2>{{currentQuestion.text}}</h2>
+                <h2>{{projectionQuestion.text}}</h2>
                 <div class="options-grid">
-                  <div v-for="(o,i) in currentQuestion.options" :key="i" class="quiz-option"
-                    :class="{'answer-correct':phase==='revealed'&&currentQuestion.type!=='poll'&&currentQuestion.correct.includes(letters[i]),'answer-dim':phase==='revealed'&&currentQuestion.type!=='poll'&&!currentQuestion.correct.includes(letters[i])}"
+                  <div v-for="(o,i) in projectionQuestion.options" :key="i" class="quiz-option"
+                    :class="{'answer-correct':projectionPhase==='revealed'&&projectionQuestion.type!=='poll'&&projectionQuestion.correct.includes(letters[i]),'answer-dim':projectionPhase==='revealed'&&projectionQuestion.type!=='poll'&&!projectionQuestion.correct.includes(letters[i])}"
                     :style="{background:colors[i]}">
-                    <span v-if="phase==='revealed'&&currentResult&&currentQuestion.type!=='poll'&&currentQuestion.correct.includes(letters[i])" class="correct-icon">✓ 正解</span>
+                    <span v-if="projectionPhase==='revealed'&&projectionResult&&projectionQuestion.type!=='poll'&&projectionQuestion.correct.includes(letters[i])" class="correct-icon">✓ 正解</span>
                     <span class="letter">{{letters[i]}}</span><span class="opt-text">{{o}}</span>
-                    <span v-if="phase==='revealed'&&currentResult" class="vote-stat">{{resultCount(i)}} 人 · {{resultPercent(i)}}%</span>
+                    <span v-if="projectionPhase==='revealed'&&projectionResult" class="vote-stat">{{projectionVoteCount(i)}} 人 · {{projectionVotePercent(i)}}%</span>
                   </div>
                 </div>
-                <div v-if="phase==='revealed'&&currentResult" class="answer-tally">
-                  <template v-if="currentQuestion.type!=='poll'">🎯 答對 <strong>{{displayedCorrectCount}}</strong> 人　／　{{currentResult.total||0}} 人作答</template>
-                  <template v-else>📊 本題共有 {{currentResult.total||0}} 人參與</template>
+                <div v-if="projectionPhase==='revealed'&&projectionResult" class="answer-tally">
+                  <template v-if="projectionQuestion.type!=='poll'">🎯 答對 <strong>{{projectionCorrectCount}}</strong> 人　／　{{projectionResult.total||0}} 人作答</template>
+                  <template v-else>📊 本題共有 {{projectionResult.total||0}} 人參與</template>
                 </div>
-                <section v-if="phase==='revealed'&&currentResult" class="projection-explanation" aria-label="答案解析，可上下捲動查看完整內容">
+                <section v-if="projectionPhase==='revealed'&&projectionResult" class="projection-explanation" aria-label="答案解析，可上下捲動查看完整內容">
                   <h3>📖 答案解析</h3>
-                  <div class="explanation-body">{{currentQuestion.explanation || '本題沒有填入答案解析，可由講師現場補充說明。'}}</div>
+                  <div class="explanation-body">{{projectionQuestion.explanation || '本題沒有填入答案解析，可由講師現場補充說明。'}}</div>
                 </section>
-                <div v-if="phase==='revealed'&&currentResult&&!fixedSessionId" class="scroll-hint">↕ 可用滑鼠滾輪、右側捲軸或手指滑動閱讀完整解析；講師按「下一題」才會顯示排名</div>
-                <div v-if="phase==='revealed'&&currentResult&&fixedSessionId" class="scroll-hint">↕ 回看模式：可上下捲動完整解析，並自由選擇上一題／下一題</div>
-                <div v-else-if="phase==='closed'" style="font-size:1.2rem;font-weight:900;text-align:center;color:#fde68a">本題作答已截止，等待講師揭曉</div>
+                <div v-if="projectionPhase==='revealed'&&projectionResult&&!projectionIsReview" class="scroll-hint">↕ 可用滑鼠滾輪、右側捲軸或手指滑動閱讀完整解析；講師按「下一題」才會顯示排名</div>
+                <div v-if="projectionPhase==='revealed'&&projectionResult&&projectionIsReview" class="scroll-hint">↕ 回看模式：可上下捲動完整解析，並自由選擇上一題／下一題</div>
+                <div v-else-if="projectionPhase==='closed'" style="font-size:1.2rem;font-weight:900;text-align:center;color:#fde68a">本題作答已截止，等待講師揭曉</div>
               </template>
             </div>
           </section>
+
+          <!-- v2.0 教學導覽抽屜：關閉時完全不擠壓原有投影題目與四格選項 -->
+          <div v-if="navigationOpen&&hasAdminAccess" class="proj-guide-overlay" @click.self="navigationOpen=false" @keydown.esc.stop="navigationOpen=false">
+            <aside class="proj-guide-panel" role="dialog" aria-modal="true" aria-label="講師教學導覽" tabindex="-1">
+              <div class="guide-head"><h2>📚 講師教學導覽</h2><button class="guide-close" type="button" @click="navigationOpen=false">✕ 關閉</button></div>
+              <div class="guide-help">任意時間跨題組回看、上一題／下一題檢討，或開始其他題組。關閉導覽後，測驗畫面的配置完全不變。</div>
+              <div class="guide-section">
+                <label for="navSet">① 選擇題組</label>
+                <select id="navSet" :value="navigationSetId" @change="navigationChooseSet($event.target.value)">
+                  <option disabled value="">請選擇題組</option>
+                  <option v-for="g in navigationAllSets" :key="g.id" :value="g.id">{{g.name}}{{g.archived?'（僅可回看）':''}}</option>
+                </select>
+                <div class="guide-status" v-if="navigationLoading">⏳ 正在取得歷史場次…</div>
+                <div class="guide-status" v-else-if="navigationError">⚠ {{navigationError}}</div>
+                <div class="guide-status" v-else>回看採唯讀歷史快照；不會改變學員手機、目前題號或成績。</div>
+              </div>
+              <div class="guide-section">
+                <h3>📖 回看任何已上課的題目</h3>
+                <label for="navSession">② 選擇測驗場次</label>
+                <select id="navSession" :value="navigationSessionId" :disabled="navigationLoading||!navigationFilteredSessions.length" @change="navigationChooseSession($event.target.value)">
+                  <option v-if="!navigationFilteredSessions.length" value="">此題組尚無歷史場次</option>
+                  <option v-for="h in navigationFilteredSessions" :key="h.id" :value="h.id">{{new Date(h.createdAt).toLocaleString('zh-TW')}} · {{h.published}}/{{h.count}} 題已公布{{h.id===projectRuntime.activeSessionId?'（目前現場）':''}}</option>
+                </select>
+                <label for="navQuestion">③ 直接選擇題號</label>
+                <select id="navQuestion" v-model.number="navigationTargetIndex" :disabled="!navigationSelectedSession">
+                  <option v-for="i in navigationQuestionNumbers" :key="i" :value="i-1">第 {{i}} 題</option>
+                </select>
+                <button class="guide-action" type="button" :disabled="navigationWorking||navigationLoading||!navigationSelectedSession" @click="openNavigationReview">📖 回看所選題目（可自由上下題）</button>
+                <p class="guide-status" v-if="!navigationFilteredSessions.length">此題組若還未測驗，可直接使用下方「開始新場次」；未公布的答案不會因回看而被公開。</p>
+                <button class="guide-close" style="margin-top:6px" type="button" :disabled="navigationLoading||navigationWorking" @click="loadNavigationSessions(true)">↻ 更新歷史場次清單</button>
+              </div>
+              <div class="guide-section">
+                <h3>▶ 隨時開始選定的題組</h3>
+                <div class="guide-warning">這是<strong>開啟全新測驗場次</strong>，不是唯讀回看。若已有未結束的現場場次，確認後會先保留該場完整紀錄及備份，安全標記結束，再開放新題組第一題；不會刪除舊答案。</div>
+                <button class="guide-action begin" type="button" :disabled="working||navigationWorking||!navigationCanStart" @click="prepareNavigationStart">▶ 開始此題組的新場次</button>
+                <p class="guide-status" v-if="!navigationCanStart">只有未封存、且至少有一題的題組可以開始新場次。</p>
+              </div>
+              <div class="guide-section" v-if="projectionIsReview">
+                <h3>↩ 回到現場</h3>
+                <div class="guide-help">目前只是投影端回看；學員端仍維持原本正在進行的場次。</div>
+                <button class="guide-action" type="button" @click="returnLiveProjection">↩ 返回目前現場題目</button>
+              </div>
+            </aside>
+          </div>
         </div>
 
         <!-- 學生端極簡：加入後只留題號和 2×2 顏色／位置固定的選項鍵，無題幹、答案、排行榜 -->
@@ -818,13 +885,44 @@
       rankShifts:{},animatingQuestionId:'',revealRaf:null,revealSerial:0,
       _initialResultsLoaded:false,_seenResults:{},pendingRank:[],
       _currentQuestionAnswerReady:false, revealStage:'answer',rankCountProgress:1,_pendingRevealQid:'',_pendingRevealResult:null,
-      _lastRankAnimationKey:'',autoAdvanceTimer:null
+      _lastRankAnimationKey:'',autoAdvanceTimer:null,
+      // v2.0：獨立於現場 session 的唯讀投影回看，切換回看不碰 runtime
+      navigationOpen:false,navigationLoading:false,navigationWorking:false,navigationLoaded:false,navigationError:'',
+      navigationSessions:[],navigationSetId:'',navigationSessionId:'',navigationTargetIndex:0,
+      navigationReviewId:'',navigationReviewRecord:null,navigationReviewIndex:0
     }; },
     computed: {
       activeSets() { return Object.entries(this.sets).map(([id,x])=>({id,...x})).filter(s=>!s.archived).sort((a,b)=>(a.order||0)-(b.order||0)); },
       archivedSets() { return Object.entries(this.sets).map(([id,x])=>({id,...x})).filter(s=>s.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)); },
       selectedSet() {return this.selectedSetId&&this.sets[this.selectedSetId]?{id:this.selectedSetId,...this.sets[this.selectedSetId]}:null;},
-      projectionSetName(){return (this.activeSessionId && this.session.setName) || this.selectedSet?.name || '請先選擇題組';},
+      // 保留原 session 即時連線；投影端回看另外讀取一份固定歷史快照。
+      projectionIsReview(){return !!(this.navigationReviewId||this.fixedSessionId);},
+      projectionSession(){return this.navigationReviewRecord||this.session;},
+      projectionOrder(){return this.projectionSession.order||[];},
+      projectionQuestionIndex(){return this.navigationReviewId?this.navigationReviewIndex:(this.fixedSessionId?this.historyIndex:(this.session.state?.questionIndex||0));},
+      projectionQuestionId(){return this.projectionIsReview?(this.projectionOrder[this.projectionQuestionIndex]||''):(this.session.state?.questionId||'');},
+      projectionQuestion(){return this.projectionSession.questions?.[this.projectionQuestionId]||null;},
+      projectionResult(){return this.projectionSession.results?.[this.projectionQuestionId]||null;},
+      projectionPhase(){return this.projectionIsReview?(this.projectionResult?'revealed':'closed'):this.phase;},
+      projectionCorrectCount(){return this.projectionIsReview?(this.projectionResult?.correctCount||0):this.displayedCorrectCount;},
+      projectionSetName(){
+        if(this.navigationReviewRecord)return this.navigationReviewRecord.setName||'歷史題組';
+        if(this.projectionIsReview)return this.session.setName||'歷史題組';
+        if(!this.activeSessionId||this.session.state?.finishedAt)return this.selectedSet?.name||this.session.setName||'請先選擇題組';
+        return this.session.setName||this.selectedSet?.name||'請先選擇題組';
+      },
+      navigationAllSets(){
+        const rows=this.activeSets.map(s=>({id:s.id,name:s.name,archived:false}));
+        const seen=new Set(rows.map(s=>s.id));
+        for(const h of this.navigationSessions){if(!seen.has(h.setKey)){
+          seen.add(h.setKey);rows.push({id:h.setKey,name:h.setName,archived:true});
+        }}
+        return rows;
+      },
+      navigationFilteredSessions(){return this.navigationSessions.filter(h=>h.setKey===this.navigationSetId);},
+      navigationSelectedSession(){return this.navigationFilteredSessions.find(h=>h.id===this.navigationSessionId)||null;},
+      navigationQuestionNumbers(){return Array.from({length:this.navigationSelectedSession?.count||0},(_,i)=>i+1);},
+      navigationCanStart(){return this.activeSets.some(s=>s.id===this.navigationSetId)&&this.questionCount(this.navigationSetId)>0;},
       localFileWarning(){return ['file:','content:'].includes(location.protocol);},
       selectedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&!q.archived).sort((a,b)=>(a.order||0)-(b.order||0));},
       archivedQuestions() {return Object.entries(this.questions).map(([id,x])=>({id,...x})).filter(q=>q.setId===this.selectedSetId&&q.archived).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));},
@@ -851,7 +949,7 @@
       },
       showLiveRank(){return this.phase==='revealed'||this.isReview;},
       rankRequestedAt(){return Number(this.session.state?.rankStartedAt)||0;},
-      isRankScene(){return !this.fixedSessionId&&this.phase==='revealed'&&!!this.rankRequestedAt;},
+      isRankScene(){return !this.projectionIsReview&&this.phase==='revealed'&&!!this.rankRequestedAt;},
       projectionMainLabel(){
         if(!this.activeSessionId||this.session.state?.finishedAt)return '▶ 開始';
         if(this.canPublish)return '✦ 看結果';
@@ -983,8 +1081,162 @@
       getLink(id,role){const url=new URL(location.href);url.searchParams.set('project',id||this.projectId);if(role==='student')url.searchParams.delete('role');else url.searchParams.set('role',role);url.searchParams.delete('poll');url.searchParams.delete('history');return url.href;},
       async copyLink(id,role){try{const value=this.getLink(id,role);if(navigator.clipboard&&location.protocol!=='file:')await navigator.clipboard.writeText(value);else{const n=document.createElement('textarea');n.value=value;document.body.appendChild(n);n.select();document.execCommand('copy');n.remove();}this.showMessage('✅ 已複製連結');}catch(e){prompt('請手動複製連結',this.getLink(id,role));}},
       renderQR(){if(typeof QRCode==='undefined')return;const el=this.currentView==='teacher'?this.$refs.teacherQr:this.currentView==='display'?this.$refs.displayQr:null;if(!el||!this.projectId)return;el.innerHTML='';new QRCode(el,{text:this.getLink(this.projectId,'student'),width:240,height:240,colorDark:'#0f172a',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});},
+
+      // ===== v2.0：關閉時不佔投影版面；只讀回看與正式切換有獨立操作 =====
+      toggleProjectionNavigation(){
+        if(this.currentView!=='display'||!this.hasAdminAccess)return;
+        this.navigationOpen=!this.navigationOpen;
+        if(!this.navigationOpen)return;
+        this.attachTeacher(); // 由歷史場次連結進入的投影也能取得最新題組清單
+        if(!this.navigationSetId){
+          const sets=this.activeSets, current=sets.findIndex(x=>x.id===this.session.setId);
+          const preferred=(current>=0&&this.isLastQuestion&&sets.length>1)?sets[(current+1)%sets.length]:sets[current]||sets[0];
+          this.navigationSetId=preferred?.id||'';
+        }
+        this.loadNavigationSessions();
+      },
+      async loadNavigationSessions(force=false){
+        if(!this.hasAdminAccess||!this.projectId||this.navigationLoading||this.navigationWorking)return;
+        if(this.navigationLoaded&&!force)return;
+        this.navigationLoading=true;this.navigationError='';
+        try{
+          // 為了讓講師能回顧「任意歷史場次」，不限制最近 50 場。
+          // 僅於開啟導覽或手動更新時讀取，不讓學員端下載此資料。
+          const snap=await refPath(`projects/${this.projectId}/sessions`).once('value');
+          this.navigationSessions=Object.entries(snap.val()||{}).filter(([,v])=>v&&Array.isArray(v.order)).map(([id,v])=>({
+            id,setId:v.setId||'',setName:v.setName||'未命名題組',
+            setKey:v.setId||('legacy:'+String(v.setName||'未命名題組')),
+            createdAt:Number(v.createdAt)||0,finishedAt:Number(v.state?.finishedAt)||0,
+            count:v.order.length,published:Object.keys(v.results||{}).length
+          })).sort((a,b)=>b.createdAt-a.createdAt||b.id.localeCompare(a.id));
+          this.navigationLoaded=true;
+          if(!this.navigationAllSets.some(s=>s.id===this.navigationSetId))this.navigationSetId=this.navigationAllSets[0]?.id||'';
+          this.navigationChooseSet(this.navigationSetId);
+        }catch(e){this.navigationError='讀取歷史場次失敗：'+e.message;this.showMessage('❌ '+this.navigationError);}
+        finally{this.navigationLoading=false;}
+      },
+      navigationChooseSet(id){
+        this.navigationSetId=id;
+        this.navigationSessionId=this.navigationFilteredSessions[0]?.id||'';
+        this.navigationTargetIndex=0;
+      },
+      navigationChooseSession(id){this.navigationSessionId=id;this.navigationTargetIndex=0;},
+      async openNavigationReview(){
+        if(this.navigationWorking||!this.hasAdminAccess||!this.navigationSelectedSession)return;
+        const selection=this.navigationSelectedSession,id=selection.id,chosenIndex=this.navigationTargetIndex;
+        this.navigationWorking=true;
+        try{
+          const snap=await refPath(`projects/${this.projectId}/sessions/${id}`).once('value');
+          const record=snap.val();
+          if(!record||!Array.isArray(record.order)||!record.order.length)throw Error('場次已不存在，或沒有題目，請更新清單');
+          const key=record.setId||('legacy:'+String(record.setName||'未命名題組'));
+          if(key!==selection.setKey)throw Error('題組資訊已變更，請更新場次清單');
+          this.navigationReviewRecord=record;this.navigationReviewId=id;
+          this.navigationReviewIndex=Math.max(0,Math.min(Number(chosenIndex)||0,record.order.length-1));
+          this.navigationOpen=false;
+          this.stopRevealAnimation(); // 只停止本畫面裝飾性動畫，不變更上課資料
+          this.$nextTick(()=>{if(this.$refs.projectionStage)this.$refs.projectionStage.scrollTop=0;});
+          this.showMessage('📖 已切換至唯讀歷史回看；可上一題、下一題或直接跳題，學員端不受影響');
+        }catch(e){this.showMessage('❌ 無法回看：'+e.message);}
+        finally{this.navigationWorking=false;}
+      },
+      projectionReviewMove(delta){this.projectionReviewJump(this.projectionQuestionIndex+delta);},
+      projectionReviewJump(number){
+        if(!this.projectionIsReview)return;
+        const index=Number(number),length=this.projectionOrder.length;
+        if(!Number.isInteger(index)||index<0||index>=length)return;
+        if(this.navigationReviewId)this.navigationReviewIndex=index;
+        else this.historyIndex=index;
+        this.$nextTick(()=>{if(this.$refs.projectionStage)this.$refs.projectionStage.scrollTop=0;});
+      },
+      returnLiveProjection(){
+        this.navigationOpen=false;this.navigationReviewId='';this.navigationReviewRecord=null;this.navigationReviewIndex=0;
+        if(this.inlineReviewMode)this.exitInlineReview();
+        else if(this.fixedSessionId){
+          this.fixedSessionId='';this.historyIndex=0;
+          const target=this.projectRuntime?.activeSessionId||'';
+          if(this.activeSessionId!==target){this.activeSessionId=target;this.bindSession();}
+          // 經由歷史連結進來時，返回現場後重整不應再次被帶回舊場次。
+          try{const url=new URL(location.href);if(url.searchParams.has('history')){url.searchParams.delete('history');history.replaceState(null,'',url.href);}}catch(e){}
+        }
+        this.$nextTick(()=>{this.settleExistingResult();if(this.$refs.projectionStage)this.$refs.projectionStage.scrollTop=0;});
+      },
+      prepareNavigationStart(){
+        if(!this.hasAdminAccess||this.working||this.navigationWorking||!this.navigationCanStart)return;
+        const target=this.navigationSetId, name=this.sets[target]?.name||'題組';
+        const liveName=this.projectRuntime?.activeSessionId?(this.session.setName||'目前題組'):'';
+        const msg=`確定立即開始「${name}」的新測驗場次？\n\n${liveName?'目前現場「'+liveName+'」若尚未結束，會先安全標記結束、建立可追溯雲端 checkpoint，並完整保留舊題目、答案、排名與歷史場次。\n\n':''}新場次會從第 1 題直接開放作答，學員手機將同步切換。\n\n「回看」只需按上方回看功能，不必開始新場次。`;
+        this.askConfirm(msg,()=>this.createNavigationSession(target));
+      },
+      async createNavigationSession(targetSetId){
+        if(!this.hasAdminAccess||this.navigationWorking||this.working)return;
+        this.navigationWorking=true;this.working=true;
+        try{
+          const base=`projects/${this.projectId}`;
+          const set=(await refPath(`${base}/sets/${targetSetId}`).once('value')).val();
+          if(!set||set.archived)throw Error('目標題組已刪除或封存，不能開始');
+          // 從最新雲端題庫生成獨立快照，不依賴回看畫面或舊場次題目。
+          const allQuestions=(await refPath(`${base}/questions`).once('value')).val()||{};
+          const selected=Object.entries(allQuestions).filter(([,q])=>q&&q.setId===targetSetId&&!q.archived)
+            .map(([id,q])=>({id,...q})).sort((a,b)=>(a.order||0)-(b.order||0));
+          if(!selected.length)throw Error('目標題組目前沒有可用題目');
+          const runtime=(await refPath(`${base}/runtime`).once('value')).val()||{};
+          const oldId=runtime.activeSessionId||'';
+          const oldSession=oldId?(await refPath(`${base}/sessions/${oldId}`).once('value')).val():null;
+          if(oldId&&!oldSession?.state)throw Error('無法驗證目前場次完整性，為保護既有成績已取消');
+          // 在修改任何場次之前，先留下可追溯、可按 stable session ID 還原的原狀備份。
+          const backup=refPath(`${base}/backups`).push();
+          await backup.set({action:'before_switch_projection_session',path:`${base}/runtime`,
+            old:clone(runtime),oldSessionId:oldId,oldSessionState:oldSession?clone(oldSession.state):null,
+            oldSetName:oldSession?.setName||'',targetSetId,savedAt:now()});
+          const newestRuntime=(await refPath(`${base}/runtime`).once('value')).val()||{};
+          if((newestRuntime.activeSessionId||'')!==oldId)throw Error('其他講師視窗已切換場次，為避免覆蓋已取消，請重新確認');
+          if(oldId){
+            const currentOldState=(await refPath(`${base}/sessions/${oldId}/state`).once('value')).val();
+            if(!currentOldState || ['questionId','questionIndex','phase','rankStartedAt','finishedAt'].some(k=>(currentOldState[k]||0)!==(oldSession.state[k]||0)))
+              throw Error('現場題目或場次狀態剛被其他視窗改變，為保護作答紀錄請再次確認');
+          }
+          const sessionId=refPath(`${base}/sessions`).push().key;
+          const opened=now()+this.serverOffset, questions={},order=[];
+          for(const q of selected){const {id,...content}=q;questions[id]=clone(content);order.push(id);}
+          const duration=Number(questions[order[0]]?.duration)||0;
+          const created={setId:targetSetId,setName:set.name,answerMode:'quick',createdAt:opened,
+            questions,order,state:{...blankState(),questionId:order[0],questionIndex:0,phase:'asking',
+              openedAt:opened,deadlineAt:duration?opened+duration*1000:0,startedQuestions:{[order[0]]:true}},members:{}};
+          const patch={};
+          patch[`${ROOT}/${base}/sessions/${sessionId}`]=created;
+          // 只更新現場指向欄位，不覆蓋 runtime 可能新增的其他資料。
+          patch[`${ROOT}/${base}/runtime/activeSessionId`]=sessionId;
+          patch[`${ROOT}/${base}/runtime/updatedAt`]=now();
+          if(oldId&&!oldSession.state.finishedAt){
+            // 局部寫入結束旗標，避免覆蓋別的講師剛同步的題號、答案或排行榜欄位。
+            const statePath=`${ROOT}/${base}/sessions/${oldId}/state`;
+            patch[`${statePath}/finishedAt`]=opened;
+            patch[`${statePath}/deadlineAt`]=0;
+            patch[`${statePath}/phase`]=oldSession.results?.[oldSession.state.questionId]?'revealed':'closed';
+          }
+          // Firebase multi-location update：新場次／原場次標記／現場指向一起提交，失敗則原場不變。
+          await db.ref().update(patch);
+          this.navigationReviewId='';this.navigationReviewRecord=null;this.navigationReviewIndex=0;
+          this.inlineReviewMode=false;this.fixedSessionId='';this.historyIndex=0;
+          // 從獨立歷史投影連結開始新場次時，也同步移除網址的 history 參數。
+          try{const url=new URL(location.href);if(url.searchParams.has('history')){url.searchParams.delete('history');history.replaceState(null,'',url.href);}}catch(e){}
+          this.navigationOpen=false;this.navigationLoaded=false;this.navigationSessions=[];
+          this.selectedSetId=targetSetId;
+          if(this.activeSessionId!==sessionId){this.activeSessionId=sessionId;this.bindSession();}
+          this.$nextTick(()=>this.renderQR());
+          this.showMessage('✅ 已保留舊場次，開始「'+set.name+'」第 1 題');
+        }catch(e){this.showMessage('❌ 無法切換題組：'+e.message);}
+        finally{this.navigationWorking=false;this.working=false;}
+      },
       openDisplay(){window.open(this.getLink(this.projectId,'display'),'_blank','noopener,noreferrer');},
       toggleFullscreen(){if(!document.fullscreenElement)document.documentElement.requestFullscreen?.().catch(()=>this.showMessage('瀏覽器未允許全螢幕'));else document.exitFullscreen?.();},
+      projectionVoteCount(i){return this.projectionIsReview?(this.projectionResult?.counts?.[i]||0):this.resultCount(i);},
+      projectionVotePercent(i){
+        if(!this.projectionIsReview)return this.resultPercent(i);
+        const total=this.projectionResult?.total||0;
+        return total?Math.round(1000*(this.projectionResult?.counts?.[i]||0)/total)/10:0;
+      },
       typeLabel(t){return ({single:'單選題',multi:'多選題',boolean:'是非題',poll:'意見投票'})[t]||t;},
       questionCount(sid){return Object.values(this.questions||{}).filter(q=>q.setId===sid&&!q.archived).length;},
       async createPoll(){const name=this.newPollName.trim();if(!name)return this.showMessage('請輸入課程專案名稱');this.working=true;
